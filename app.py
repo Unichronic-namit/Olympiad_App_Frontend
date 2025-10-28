@@ -1,452 +1,664 @@
 import streamlit as st
 import requests
+from datetime import date
 
-# API Base URL
+# ========================================
+# CONFIGURATION
+# ========================================
 API_BASE_URL = "https://olympiad-app-backend.onrender.com"
 
-st.title("Olympiad API Tester")
+# ========================================
+# CUSTOM CSS - Notion-inspired Mobile-First Design
+# ========================================
+def load_custom_css():
+    st.markdown("""
+    <style>
+    /* Import Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-# Sidebar for selecting module
-st.sidebar.header("Select Module")
-module = st.sidebar.selectbox(
-    "Choose API Module",
-    ["Exams", "Sections", "Syllabus", "Notes", "Questions", "Analytics", "Auth"]
-)
+    /* Global Styles */
+    * {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
 
-# ----- EXAMS MODULE -----
-if module == "Exams":
-    st.header("Exam Overview APIs")
-    
-    action = st.radio("Select Action", ["Get All Exams", "Get Single Exam", "Create Exam", "Update Exam", "Delete Exam"])
-    
-    if action == "Get All Exams":
-        if st.button("Fetch All Exams"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/exams")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Get Single Exam":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        if st.button("Fetch Exam"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/exams/{exam_id}")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Create Exam":
-        exam = st.text_input("Exam Name")
-        grade = st.number_input("Grade", min_value=1, max_value=12, step=1)
-        level = st.number_input("Level", min_value=1, step=1)
-        total_questions = st.number_input("Total Questions", min_value=0, step=1)
-        total_marks = st.number_input("Total Marks", min_value=0, step=1)
-        total_time_mins = st.number_input("Total Time (mins)", min_value=1, step=1)
-        
-        if st.button("Create Exam"):
-            with st.spinner("Creating..."):
-                data = {
-                    "exam": exam,
-                    "grade": grade,
-                    "level": level,
-                    "total_questions": total_questions,
-                    "total_marks": total_marks,
-                    "total_time_mins": total_time_mins
-                }
-                response = requests.post(f"{API_BASE_URL}/exams", json=data)
-                if response.status_code == 201:
-                    st.success("Exam created!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Update Exam":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        total_marks = st.number_input("Total Marks", min_value=0, step=1)
-        total_time_mins = st.number_input("Total Time (mins)", min_value=1, step=1)
-        
-        if st.button("Update Exam"):
-            with st.spinner("Updating..."):
-                data = {
-                    "total_marks": total_marks,
-                    "total_time_mins": total_time_mins
-                }
-                response = requests.put(f"{API_BASE_URL}/exams/{exam_id}", json=data)
-                if response.status_code == 200:
-                    st.success("Exam updated!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Delete Exam":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        if st.button("Delete Exam"):
-            with st.spinner("Deleting..."):
-                response = requests.delete(f"{API_BASE_URL}/exams/{exam_id}")
-                if response.status_code == 204:
-                    st.success("Exam deleted!")
-                else:
-                    st.error(f"Error: {response.status_code}")
+    /* Hide Streamlit Default Elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 
-# ----- SECTIONS MODULE -----
-elif module == "Sections":
-    st.header("Sections APIs")
-    
-    action = st.radio("Select Action", ["Get All Sections", "Create Section", "Update Section", "Delete Section"])
-    
-    if action == "Get All Sections":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        if st.button("Fetch Sections"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/exams/{exam_id}/sections")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Create Section":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        section = st.text_input("Section Name")
-        no_of_questions = st.number_input("Number of Questions", min_value=1, step=1)
-        marks_per_question = st.number_input("Marks per Question", min_value=1, step=1)
-        total_marks = st.number_input("Total Marks", min_value=1, step=1)
-        
-        if st.button("Create Section"):
-            with st.spinner("Creating..."):
-                data = {
-                    "section": section,
-                    "no_of_questions": no_of_questions,
-                    "marks_per_question": marks_per_question,
-                    "total_marks": total_marks
-                }
-                response = requests.post(f"{API_BASE_URL}/exams/{exam_id}/sections", json=data)
-                if response.status_code == 201:
-                    st.success("Section created!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Update Section":
-        section_id = st.number_input("Section ID", min_value=1, step=1)
-        no_of_questions = st.number_input("Number of Questions", min_value=1, step=1)
-        total_marks = st.number_input("Total Marks", min_value=1, step=1)
-        
-        if st.button("Update Section"):
-            with st.spinner("Updating..."):
-                data = {
-                    "no_of_questions": no_of_questions,
-                    "total_marks": total_marks
-                }
-                response = requests.put(f"{API_BASE_URL}/sections/{section_id}", json=data)
-                if response.status_code == 200:
-                    st.success("Section updated!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Delete Section":
-        section_id = st.number_input("Section ID", min_value=1, step=1)
-        if st.button("Delete Section"):
-            with st.spinner("Deleting..."):
-                response = requests.delete(f"{API_BASE_URL}/sections/{section_id}")
-                if response.status_code == 204:
-                    st.success("Section deleted!")
-                else:
-                    st.error(f"Error: {response.status_code}")
+    /* Sidebar Styles - Notion Inspired */
+    [data-testid="stSidebar"] {
+        background-color: #F7F6F3;
+        padding: 0;
+    }
 
-# ----- SYLLABUS MODULE -----
-elif module == "Syllabus":
-    st.header("Syllabus APIs")
-    
-    action = st.radio("Select Action", ["Get Syllabus", "Create Topic", "Update Topic", "Delete Topic"])
-    
-    if action == "Get Syllabus":
-        section_id = st.number_input("Section ID", min_value=1, step=1)
-        if st.button("Fetch Syllabus"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/sections/{section_id}/syllabus")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Create Topic":
-        section_id = st.number_input("Section ID", min_value=1, step=1)
-        topic = st.text_input("Topic")
-        subtopic = st.text_input("Subtopic (optional)")
-        
-        if st.button("Create Topic"):
-            with st.spinner("Creating..."):
-                data = {
-                    "topic": topic,
-                    "subtopic": subtopic
-                }
-                response = requests.post(f"{API_BASE_URL}/sections/{section_id}/syllabus", json=data)
-                if response.status_code == 201:
-                    st.success("Topic created!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Update Topic":
-        syllabus_id = st.number_input("Syllabus ID", min_value=1, step=1)
-        topic = st.text_input("Topic")
-        subtopic = st.text_input("Subtopic")
-        
-        if st.button("Update Topic"):
-            with st.spinner("Updating..."):
-                data = {
-                    "topic": topic,
-                    "subtopic": subtopic
-                }
-                response = requests.put(f"{API_BASE_URL}/syllabus/{syllabus_id}", json=data)
-                if response.status_code == 200:
-                    st.success("Topic updated!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Delete Topic":
-        syllabus_id = st.number_input("Syllabus ID", min_value=1, step=1)
-        if st.button("Delete Topic"):
-            with st.spinner("Deleting..."):
-                response = requests.delete(f"{API_BASE_URL}/syllabus/{syllabus_id}")
-                if response.status_code == 204:
-                    st.success("Topic deleted!")
-                else:
-                    st.error(f"Error: {response.status_code}")
+    [data-testid="stSidebar"] > div:first-child {
+        background-color: #F7F6F3;
+        padding: 0.5rem 0.5rem;
+    }
 
-# ----- NOTES MODULE -----
-elif module == "Notes":
-    st.header("Notes APIs")
-    
-    action = st.radio("Select Action", ["Get All Notes", "Create Note", "Update Note", "Delete Note"])
-    
-    if action == "Get All Notes":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        if st.button("Fetch Notes"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/exams/{exam_id}/notes")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Create Note":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        note = st.text_area("Note")
-        
-        if st.button("Create Note"):
-            with st.spinner("Creating..."):
-                data = {"note": note}
-                response = requests.post(f"{API_BASE_URL}/exams/{exam_id}/notes", json=data)
-                if response.status_code == 201:
-                    st.success("Note created!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Update Note":
-        note_id = st.number_input("Note ID", min_value=1, step=1)
-        note = st.text_area("Note")
-        
-        if st.button("Update Note"):
-            with st.spinner("Updating..."):
-                data = {"note": note}
-                response = requests.put(f"{API_BASE_URL}/notes/{note_id}", json=data)
-                if response.status_code == 200:
-                    st.success("Note updated!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Delete Note":
-        note_id = st.number_input("Note ID", min_value=1, step=1)
-        if st.button("Delete Note"):
-            with st.spinner("Deleting..."):
-                response = requests.delete(f"{API_BASE_URL}/notes/{note_id}")
-                if response.status_code == 204:
-                    st.success("Note deleted!")
-                else:
-                    st.error(f"Error: {response.status_code}")
+    /* Sidebar Divider */
+    .sidebar-divider {
+        height: 1px;
+        background-color: rgba(55, 53, 47, 0.09);
+        margin: 0.5rem 0;
+    }
 
-# ----- QUESTIONS MODULE -----
-elif module == "Questions":
-    st.header("Questions APIs")
-    
-    action = st.radio("Select Action", ["Get All Questions", "Get Questions by Topic", "Add Question", "Update Question", "Delete Question"])
-    
-    if action == "Get All Questions":
-        syllabus_id = st.number_input("Syllabus ID (optional)", min_value=1, step=1, value=1)
-        difficulty = st.text_input("Difficulty (optional, e.g., easy, medium, hard)")
-        
-        if st.button("Fetch Questions"):
-            with st.spinner("Loading..."):
-                params = {}
-                if syllabus_id > 0:
-                    params['syllabus_id'] = syllabus_id
-                if difficulty:
-                    params['difficulty'] = difficulty
-                
-                response = requests.get(f"{API_BASE_URL}/questions", params=params)
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Get Questions by Topic":
-        syllabus_id = st.number_input("Syllabus ID", min_value=1, step=1)
-        
-        if st.button("Fetch Questions"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/syllabus/{syllabus_id}/questions")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Add Question":
-        syllabus_id = st.number_input("Syllabus ID", min_value=1, step=1)
-        difficulty = st.selectbox("Difficulty", ["easy", "medium", "hard"])
-        question_text = st.text_area("Question Text")
-        option_a = st.text_input("Option A")
-        option_b = st.text_input("Option B")
-        option_c = st.text_input("Option C")
-        option_d = st.text_input("Option D")
-        correct_option = st.selectbox("Correct Option", ["A", "B", "C", "D"])
-        solution = st.text_area("Solution (optional)")
-        
-        if st.button("Add Question"):
-            with st.spinner("Creating..."):
-                data = {
-                    "difficulty": difficulty,
-                    "question_text": question_text,
-                    "option_a": option_a,
-                    "option_b": option_b,
-                    "option_c": option_c,
-                    "option_d": option_d,
-                    "correct_option": correct_option,
-                    "solution": solution
-                }
-                response = requests.post(f"{API_BASE_URL}/syllabus/{syllabus_id}/questions", json=data)
-                if response.status_code == 201:
-                    st.success("Question added!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Update Question":
-        question_id = st.number_input("Question ID", min_value=1, step=1)
-        solution = st.text_area("New Solution")
-        
-        if st.button("Update Question"):
-            with st.spinner("Updating..."):
-                data = {"solution": solution}
-                response = requests.put(f"{API_BASE_URL}/questions/{question_id}", json=data)
-                if response.status_code == 200:
-                    st.success("Question updated!")
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Delete Question":
-        question_id = st.number_input("Question ID", min_value=1, step=1)
-        
-        if st.button("Delete Question"):
-            with st.spinner("Deleting..."):
-                response = requests.delete(f"{API_BASE_URL}/questions/{question_id}")
-                if response.status_code == 204:
-                    st.success("Question deleted!")
-                else:
-                    st.error(f"Error: {response.status_code}")
+    /* Override Streamlit Sidebar Button - Notion Style */
+    [data-testid="stSidebar"] .stButton > button {
+        width: 100%;
+        background-color: transparent;
+        color: #5A5A5A;
+        border: none;
+        border-radius: 3px;
+        padding: 0.25rem 0.5rem;
+        font-weight: 400;
+        font-size: 0.813rem;
+        text-align: left;
+        margin: 0;
+        height: auto;
+        min-height: 27px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 
-# ----- ANALYTICS MODULE -----
-elif module == "Analytics":
-    st.header("Combined & Analytics APIs")
-    
-    action = st.radio("Select Action", ["Get Full Exam Overview", "Get Exam Analytics"])
-    
-    if action == "Get Full Exam Overview":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        
-        if st.button("Fetch Full Overview"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/exams/{exam_id}/overview")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Get Exam Analytics":
-        exam_id = st.number_input("Exam_overview ID", min_value=1, step=1)
-        
-        if st.button("Fetch Analytics"):
-            with st.spinner("Loading..."):
-                response = requests.get(f"{API_BASE_URL}/analytics/exam/{exam_id}")
-                if response.status_code == 200:
-                    st.json(response.json())
-                else:
-                    st.error(f"Error: {response.status_code}")
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: rgba(0, 0, 0, 0.03);
+        box-shadow: none;
+        transform: none;
+    }
 
-# ----- AUTH MODULE -----
-elif module == "Auth":
-    st.header("Authentication APIs")
-    
-    action = st.radio("Select Action", ["Signup", "Login"])
-    
-    if action == "Signup":
-        first_name = st.text_input("First Name")
-        last_name = st.text_input("Last Name")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        grade = st.number_input("Grade", min_value=1, max_value=12, step=1)
-        dob = st.date_input("Date of Birth")
-        country_code = st.text_input("Country Code (e.g., +91)")
-        phone_number = st.text_input("Phone Number")
-        profile_image = st.text_input("Profile Image URL")
-        school_name = st.text_input("School Name")
-        city = st.text_input("City")
-        state = st.text_input("State")
-        
-        if st.button("Signup"):
-            with st.spinner("Creating account..."):
-                data = {
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "email": email,
-                    "password": password,
-                    "grade": grade,
-                    "date_of_birth": str(dob),
-                    "country_code": country_code,
-                    "phone_number": phone_number,
-                    "profile_image": profile_image,
-                    "school_name": school_name,
-                    "city": city,
-                    "state": state
-                }
-                response = requests.post(f"{API_BASE_URL}/signup", json=data)
-                if response.status_code == 201:
-                    st.success("Account created!")
-                    st.json(response.json())
+    [data-testid="stSidebar"] .stButton > button:active {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Sidebar icon styling */
+    [data-testid="stSidebar"] .stButton > button::before {
+        opacity: 0.6;
+    }
+
+    /* Main Container - Mobile First */
+    .main .block-container {
+        padding: 1rem 1rem;
+        max-width: 100%;
+    }
+
+    @media (min-width: 768px) {
+        .main .block-container {
+            padding: 2rem 2rem;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+    }
+
+    /* Background */
+    .stApp {
+        background-color: #FFFFFF;
+    }
+
+    /* Custom Button Styles */
+    .stButton > button {
+        width: 100%;
+        background-color: #2D2D2D;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+        margin-top: 0.5rem;
+    }
+
+    .stButton > button:hover {
+        background-color: #404040;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transform: translateY(-1px);
+    }
+
+    /* Input Fields */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stDateInput > div > div > input,
+    .stSelectbox > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #E0E0E0;
+        padding: 0.75rem;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: #2D2D2D;
+        box-shadow: 0 0 0 1px #2D2D2D;
+    }
+
+    /* Labels */
+    .stTextInput > label,
+    .stNumberInput > label,
+    .stDateInput > label,
+    .stSelectbox > label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #37352F;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Title Styles */
+    h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #37352F;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #37352F;
+        margin-bottom: 1rem;
+    }
+
+    h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #37352F;
+    }
+
+    /* Subtitle/Description */
+    .subtitle {
+        text-align: center;
+        color: #787774;
+        font-size: 0.95rem;
+        margin-bottom: 2rem;
+        line-height: 1.5;
+    }
+
+    /* Success/Error Messages */
+    .stSuccess, .stError, .stWarning, .stInfo {
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+
+    /* Divider */
+    hr {
+        margin: 2rem 0;
+        border: none;
+        border-top: 1px solid #E0E0E0;
+    }
+
+    /* Link Styles */
+    a {
+        color: #2D2D2D;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    a:hover {
+        text-decoration: underline;
+    }
+
+    /* Card Style */
+    .card {
+        background: #FAFAFA;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        border: 1px solid #E0E0E0;
+    }
+
+    /* Logo/Brand Section */
+    .brand {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .brand-icon {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Toggle Link */
+    .toggle-link {
+        text-align: center;
+        margin-top: 1.5rem;
+        color: #787774;
+        font-size: 0.9rem;
+    }
+
+    /* Password Input */
+    input[type="password"] {
+        font-family: 'Courier New', monospace;
+    }
+
+    /* Remove extra spacing */
+    .element-container {
+        margin-bottom: 0;
+    }
+
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+        justify-content: center;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        font-weight: 500;
+        font-size: 1rem;
+        color: #787774;
+        padding: 0.5rem 0;
+    }
+
+    .stTabs [aria-selected="true"] {
+        color: #2D2D2D;
+        border-bottom: 2px solid #2D2D2D;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ========================================
+# SESSION STATE INITIALIZATION
+# ========================================
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = None
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 'auth'
+if 'active_nav' not in st.session_state:
+    st.session_state.active_nav = 'Dashboard'
+
+# ========================================
+# AUTHENTICATION FUNCTIONS
+# ========================================
+def signup_user(user_data):
+    """Sign up a new user"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/signup", json=user_data)
+        return response
+    except Exception as e:
+        return None
+
+def login_user(email, password):
+    """Login user"""
+    try:
+        response = requests.post(f"{API_BASE_URL}/login", json={
+            "email": email,
+            "password": password
+        })
+        return response
+    except Exception as e:
+        return None
+
+# ========================================
+# AUTHENTICATION PAGE
+# ========================================
+def auth_page():
+    """Authentication page with Sign In and Sign Up"""
+
+    # Brand Section
+    st.markdown("""
+        <div class="brand">
+            <div class="brand-icon">🎓</div>
+            <h1>Olympiad Prep</h1>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<p class="subtitle">Master your Olympiad journey with personalized practice and smart analytics</p>', unsafe_allow_html=True)
+
+    # Tabs for Sign In and Sign Up
+    tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
+
+    # ========== SIGN IN TAB ==========
+    with tab1:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.form("signin_form", clear_on_submit=False):
+            email = st.text_input("Email", placeholder="Enter your email", key="signin_email")
+            password = st.text_input("Password", type="password", placeholder="Enter your password", key="signin_password")
+
+            submitted = st.form_submit_button("Sign In")
+
+            if submitted:
+                if not email or not password:
+                    st.error("Please fill in all fields")
                 else:
-                    st.error(f"Error: {response.status_code}")
-    
-    elif action == "Login":
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        
-        if st.button("Login"):
-            with st.spinner("Logging in..."):
-                data = {
-                    "email": email,
-                    "password": password
-                }
-                response = requests.post(f"{API_BASE_URL}/login", json=data)
-                if response.status_code == 200:
-                    st.success("Login successful!")
-                    st.json(response.json())
+                    with st.spinner("Signing in..."):
+                        response = login_user(email, password)
+
+                        if response and response.status_code == 200:
+                            user_data = response.json()
+                            st.session_state.authenticated = True
+                            st.session_state.user_data = user_data
+                            st.session_state.current_page = 'dashboard'
+                            st.success(f"Welcome back, {user_data.get('first_name', 'User')}!")
+                            st.rerun()
+                        elif response and response.status_code == 401:
+                            st.error("Invalid email or password")
+                        elif response and response.status_code == 403:
+                            st.error("Your account is deactivated")
+                        else:
+                            st.error("Failed to sign in. Please try again.")
+
+    # ========== SIGN UP TAB ==========
+    with tab2:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.form("signup_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                first_name = st.text_input("First Name", placeholder="John", key="signup_first")
+            with col2:
+                last_name = st.text_input("Last Name", placeholder="Doe", key="signup_last")
+
+            email = st.text_input("Email", placeholder="john.doe@example.com", key="signup_email")
+            password = st.text_input("Password", type="password", placeholder="Create a password", key="signup_password")
+
+            col3, col4 = st.columns(2)
+            with col3:
+                grade = st.number_input("Grade", min_value=1, max_value=12, value=8, key="signup_grade")
+            with col4:
+                dob = st.date_input("Date of Birth", min_value=date(2000, 1, 1), max_value=date.today(), key="signup_dob")
+
+            col5, col6 = st.columns([1, 2])
+            with col5:
+                country_code = st.text_input("Code", value="+91", key="signup_country_code")
+            with col6:
+                phone = st.text_input("Phone Number", placeholder="9876543210", key="signup_phone")
+
+            school = st.text_input("School Name", placeholder="Enter your school name", key="signup_school")
+
+            col7, col8 = st.columns(2)
+            with col7:
+                city = st.text_input("City", placeholder="Mumbai", key="signup_city")
+            with col8:
+                state = st.text_input("State", placeholder="Maharashtra", key="signup_state")
+
+            submitted = st.form_submit_button("Create Account")
+
+            if submitted:
+                # Validation
+                if not all([first_name, last_name, email, password, phone, school, city, state]):
+                    st.error("Please fill in all required fields")
+                elif len(password) < 6:
+                    st.error("Password must be at least 6 characters long")
+                elif '@' not in email:
+                    st.error("Please enter a valid email address")
                 else:
-                    st.error(f"Error: {response.status_code}")
+                    user_data = {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "email": email,
+                        "password": password,
+                        "grade": int(grade),
+                        "date_of_birth": str(dob),
+                        "country_code": country_code,
+                        "phone_number": phone,
+                        "profile_image": "",
+                        "school_name": school,
+                        "city": city,
+                        "state": state
+                    }
+
+                    with st.spinner("Creating your account..."):
+                        response = signup_user(user_data)
+
+                        if response and response.status_code == 201:
+                            st.success("Account created successfully! Please sign in.")
+                        elif response and response.status_code == 400:
+                            st.error("Email already registered or invalid data")
+                        else:
+                            st.error("Failed to create account. Please try again.")
+
+# ========================================
+# SIDEBAR NAVIGATION
+# ========================================
+def render_sidebar():
+    """Render Notion-style sidebar navigation"""
+
+    user = st.session_state.user_data
+
+    with st.sidebar:
+        # User Profile Section - Compact Notion Style
+        st.markdown(f"""
+            <div style="padding: 0.375rem 0.5rem; margin-bottom: 0.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="width: 20px; height: 20px; border-radius: 3px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 0.688rem; font-weight: 600;">
+                        {user.get('first_name', 'U')[0].upper()}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 0.813rem; font-weight: 500; color: #37352F; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {user.get('first_name', 'User')}'s Workspace
+                        </div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Search (placeholder)
+        st.markdown("""
+            <div style="padding: 0.25rem 0.5rem; margin: 0.125rem 0; color: #9B9A97; font-size: 0.813rem; display: flex; align-items: center; gap: 0.5rem; height: 27px;">
+                <span style="opacity: 0.6;">🔍</span>
+                <span>Search</span>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Navigation Menu
+        nav_items = [
+            ("🏠", "Home", "home"),
+            ("📊", "Dashboard", "dashboard"),
+            ("📚", "My Exams", "exams"),
+            ("📝", "Practice", "practice"),
+        ]
+
+        for icon, label, key in nav_items:
+            if st.button(f"{icon} {label}", key=f"nav_{key}", use_container_width=True):
+                st.session_state.active_nav = label
+                st.rerun()
+
+        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+
+        # Section Label
+        st.markdown("""
+            <div style="padding: 0.25rem 0.5rem; margin: 0.25rem 0; color: #9B9A97; font-size: 0.688rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                MY STUDY
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Study items
+        study_items = [
+            ("📈", "Analytics", "analytics"),
+            ("📖", "Study Notes", "notes"),
+            ("🔖", "Bookmarks", "bookmarks"),
+        ]
+
+        for icon, label, key in study_items:
+            if st.button(f"{icon} {label}", key=f"study_{key}", use_container_width=True):
+                st.session_state.active_nav = label
+                st.rerun()
+
+        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+
+        # Settings & Profile
+        if st.button("👤 Profile", key="nav_profile", use_container_width=True):
+            st.session_state.active_nav = "Profile"
+            st.rerun()
+
+        if st.button("⚙️ Settings", key="nav_settings", use_container_width=True):
+            st.session_state.active_nav = "Settings"
+            st.rerun()
+
+        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+
+        if st.button("🚪 Sign Out", key="nav_signout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.user_data = None
+            st.session_state.current_page = 'auth'
+            st.session_state.active_nav = 'Dashboard'
+            st.rerun()
+
+# ========================================
+# PAGE COMPONENTS
+# ========================================
+def dashboard_page():
+    """Main dashboard after login"""
+    user = st.session_state.user_data
+
+    st.markdown(f"""
+        <h1 style="text-align: left;">Welcome back, {user.get('first_name', 'User')}! 👋</h1>
+        <p style="color: #787774; font-size: 0.95rem; margin-top: -0.5rem;">Grade {user.get('grade', 'N/A')} • {user.get('school_name', 'School')}</p>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Quick Stats
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("""
+            <div class="card">
+                <div style="font-size: 1.5rem; font-weight: 600; color: #37352F;">0</div>
+                <div style="font-size: 0.875rem; color: #787774; margin-top: 0.25rem;">Tests Taken</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+            <div class="card">
+                <div style="font-size: 1.5rem; font-weight: 600; color: #37352F;">0%</div>
+                <div style="font-size: 0.875rem; color: #787774; margin-top: 0.25rem;">Avg Score</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+            <div class="card">
+                <div style="font-size: 1.5rem; font-weight: 600; color: #37352F;">0 🔥</div>
+                <div style="font-size: 0.875rem; color: #787774; margin-top: 0.25rem;">Day Streak</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Coming Soon
+    st.markdown("""
+        <div class="card" style="margin-top: 2rem;">
+            <h3>🚀 Dashboard Coming Soon!</h3>
+            <p style="color: #787774; margin-top: 0.5rem;">
+                We're building an amazing experience for you. Stay tuned!
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+def home_page():
+    """Home page"""
+    st.markdown("<h1>🏠 Home</h1>", unsafe_allow_html=True)
+    st.markdown("Welcome to your home page!")
+
+def exams_page():
+    """My Exams page"""
+    st.markdown("<h1>📚 My Exams</h1>", unsafe_allow_html=True)
+    st.markdown("Browse and select exams to practice.")
+
+def practice_page():
+    """Practice page"""
+    st.markdown("<h1>📝 Practice</h1>", unsafe_allow_html=True)
+    st.markdown("Start practicing questions!")
+
+def analytics_page():
+    """Analytics page"""
+    st.markdown("<h1>📈 Analytics</h1>", unsafe_allow_html=True)
+    st.markdown("View your performance analytics.")
+
+def notes_page():
+    """Study Notes page"""
+    st.markdown("<h1>📖 Study Notes</h1>", unsafe_allow_html=True)
+    st.markdown("Access your study materials.")
+
+def bookmarks_page():
+    """Bookmarks page"""
+    st.markdown("<h1>🔖 Bookmarks</h1>", unsafe_allow_html=True)
+    st.markdown("View your bookmarked questions.")
+
+def profile_page():
+    """Profile page"""
+    user = st.session_state.user_data
+    st.markdown("<h1>👤 Profile</h1>", unsafe_allow_html=True)
+
+    st.markdown("### Your Information")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text_input("First Name", value=user.get('first_name', ''), disabled=True)
+        st.text_input("Email", value=user.get('email', ''), disabled=True)
+        st.text_input("School", value=user.get('school_name', ''), disabled=True)
+
+    with col2:
+        st.text_input("Last Name", value=user.get('last_name', ''), disabled=True)
+        st.text_input("Grade", value=str(user.get('grade', '')), disabled=True)
+        st.text_input("City", value=user.get('city', ''), disabled=True)
+
+def settings_page():
+    """Settings page"""
+    st.markdown("<h1>⚙️ Settings</h1>", unsafe_allow_html=True)
+    st.markdown("Manage your account settings.")
+
+# ========================================
+# MAIN DASHBOARD ROUTER
+# ========================================
+def main_app():
+    """Main app with sidebar navigation"""
+
+    # Render sidebar
+    render_sidebar()
+
+    # Route to active page
+    active = st.session_state.active_nav
+
+    if active == "Home":
+        home_page()
+    elif active == "Dashboard":
+        dashboard_page()
+    elif active == "My Exams":
+        exams_page()
+    elif active == "Practice":
+        practice_page()
+    elif active == "Analytics":
+        analytics_page()
+    elif active == "Study Notes":
+        notes_page()
+    elif active == "Bookmarks":
+        bookmarks_page()
+    elif active == "Profile":
+        profile_page()
+    elif active == "Settings":
+        settings_page()
+    else:
+        dashboard_page()
+
+# ========================================
+# MAIN APP
+# ========================================
+def main():
+    # Set page config
+    st.set_page_config(
+        page_title="Olympiad Prep",
+        page_icon="🎓",
+        layout="centered",
+        initial_sidebar_state="expanded" if st.session_state.authenticated else "collapsed"
+    )
+
+    # Load custom CSS
+    load_custom_css()
+
+    # Route to appropriate page
+    if st.session_state.authenticated:
+        main_app()
+    else:
+        auth_page()
+
+if __name__ == "__main__":
+    main()
