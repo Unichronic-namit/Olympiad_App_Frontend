@@ -146,7 +146,7 @@ olympiad-prep/
 1. Clone or navigate to the project directory:
 
 ```bash
-cd olympiad-prep
+cd nextjs
 ```
 
 2. Install dependencies:
