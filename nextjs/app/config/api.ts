@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = "https://olympiad-app-backend.onrender.com";
+export const API_BASE_URL = "https://olympiad-app-backend-1.onrender.com";
 
 // API Endpoints
 export const API_ENDPOINTS = {
