@@ -6,7 +6,7 @@ export default function HomePage() {
       {/* Navigation */}
       <nav className="container mx-auto px-6 py-6 border-b border-gray-200">
         <div className="flex justify-between items-center">
-          <div className="text-2xl font-bold text-blue-600">Olympiad Prep</div>
+          <div className="text-xl font-bold text-blue-600">Olympiad</div>
           <div className="space-x-4">
             <Link
               href="/login"
