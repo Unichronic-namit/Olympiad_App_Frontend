@@ -53,7 +53,15 @@ export default function ExamsPage() {
     }
 
     try {
-      setUserData(JSON.parse(storedUserData));
+      const parsedUserData = JSON.parse(storedUserData);
+      console.log("User data from localStorage:", parsedUserData);
+      console.log("User ID:", parsedUserData.user_id);
+
+      if (!parsedUserData.user_id) {
+        console.error("user_id not found in user data:", parsedUserData);
+      }
+
+      setUserData(parsedUserData);
     } catch (error) {
       console.error("Error parsing user data:", error);
       router.push("/login");
@@ -61,15 +69,32 @@ export default function ExamsPage() {
   }, [router]);
 
   useEffect(() => {
-    // Fetch exams from API
+    // Fetch user's registered exams from API
     const fetchExams = async () => {
-      if (!userData) return;
+      if (!userData) {
+        console.log("Waiting for user data...");
+        return;
+      }
+
+      if (!userData.user_id) {
+        console.error("user_id is missing from userData:", userData);
+        setError("User ID not found. Please login again.");
+        setIsLoading(false);
+        return;
+      }
 
       setIsLoading(true);
       setError("");
 
       try {
-        const response = await fetch(getApiUrl(API_ENDPOINTS.EXAMS), {
+        // Fetch user's exams using user_id from localStorage (stored during login)
+        const apiUrl = `${getApiUrl(API_ENDPOINTS.USER_EXAMS)}/${
+          userData.user_id
+        }`;
+        console.log("Fetching user exams from:", apiUrl);
+        console.log("Using user_id:", userData.user_id);
+
+        const response = await fetch(apiUrl, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -79,7 +104,7 @@ export default function ExamsPage() {
         });
 
         const responseText = await response.text();
-        console.log("Exams API Response:", responseText);
+        console.log("User Exams API Response:", responseText);
 
         if (!response.ok) {
           throw new Error(
@@ -100,6 +125,8 @@ export default function ExamsPage() {
           ? data
           : data.exams || data.data || [];
 
+        console.log("User's registered exams:", examsData);
+
         // Use the data directly as it matches our API response structure
         setExams(examsData);
 
@@ -115,16 +142,16 @@ export default function ExamsPage() {
         // Filter exams based on selected grade or user's grade
         filterExams(examsData, selectedGrade || userData.grade);
       } catch (error: any) {
-        console.error("Error fetching exams:", error);
+        console.error("Error fetching user exams:", error);
         setError(
-          error.message || "Failed to load exams. Please try again later."
+          error.message || "Failed to load your exams. Please try again later."
         );
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (userData) {
+    if (userData && userData.user_id) {
       fetchExams();
     }
   }, [userData]);
@@ -163,13 +190,15 @@ export default function ExamsPage() {
           {/* Page Header */}
           <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Exams</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                My Exams
+              </h1>
               <p className="text-gray-600">
                 {selectedGrade !== null
-                  ? `Showing exams for Grade ${selectedGrade}`
+                  ? `Showing your exams for Grade ${selectedGrade}`
                   : userData?.grade
-                  ? `Showing exams for Grade ${userData.grade}`
-                  : "Browse and select exams to practice or take tests"}
+                  ? `Showing your exams for Grade ${userData.grade}`
+                  : "Your registered exams"}
               </p>
             </div>
 
@@ -289,15 +318,15 @@ export default function ExamsPage() {
               <div className="text-6xl mb-4">📝</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 {selectedGrade !== null
-                  ? `No Exams Available for Grade ${selectedGrade}`
+                  ? `No Exams Registered for Grade ${selectedGrade}`
                   : userData?.grade
-                  ? `No Exams Available for Grade ${userData.grade}`
-                  : "No Exams Available"}
+                  ? `No Exams Registered for Grade ${userData.grade}`
+                  : "No Exams Registered"}
               </h3>
               <p className="text-gray-600">
                 {selectedGrade !== null || userData?.grade
-                  ? "Check back later for new exam announcements for this grade."
-                  : "Check back later for new exam announcements."}
+                  ? "You haven't registered for any exams for this grade yet."
+                  : "You haven't registered for any exams yet."}
               </p>
             </div>
           )}

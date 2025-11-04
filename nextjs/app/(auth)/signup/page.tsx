@@ -1,16 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { getApiUrl, API_ENDPOINTS } from "../../config/api";
 
 export default function SignupPage() {
+  type Exam = {
+    exam_overview_id: number;
+    exam: string;
+    grade: number;
+    level: number;
+    total_questions: number;
+    total_marks: number;
+    total_time_mins: number;
+  };
+
   type FormData = {
     firstName: string;
     lastName: string;
     email: string;
     password: string;
     grade: string;
+    exams: number[];
     dob: string;
     phoneCode: string;
     phone: string;
@@ -27,6 +38,7 @@ export default function SignupPage() {
     email: "",
     password: "",
     grade: "",
+    exams: [],
     dob: "",
     phoneCode: "+91",
     phone: "",
@@ -39,6 +51,152 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [apiError, setApiError] = useState("");
+  const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(false);
+  const examsDropdownRef = useRef<HTMLDivElement>(null);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [filteredExams, setFilteredExams] = useState<Exam[]>([]);
+  const [isLoadingExams, setIsLoadingExams] = useState(false);
+  const [examsError, setExamsError] = useState("");
+
+  // Fetch exams from API
+  useEffect(() => {
+    const fetchExams = async () => {
+      setIsLoadingExams(true);
+      setExamsError("");
+
+      try {
+        const response = await fetch(getApiUrl(API_ENDPOINTS.EXAMS), {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+        });
+
+        const responseText = await response.text();
+        console.log("Exams API Response:", responseText);
+
+        if (!response.ok) {
+          throw new Error(
+            responseText || `Failed to fetch exams: ${response.status}`
+          );
+        }
+
+        let data: any;
+        try {
+          data = responseText ? JSON.parse(responseText) : [];
+        } catch (parseError) {
+          console.error("Failed to parse JSON:", parseError);
+          throw new Error("Invalid response from server");
+        }
+
+        // Handle both array and object responses
+        const examsData = Array.isArray(data)
+          ? data
+          : data.exams || data.data || [];
+
+        setExams(examsData);
+        // Initially, show all exams if no grade is selected
+        setFilteredExams(examsData);
+      } catch (error: any) {
+        console.error("Error fetching exams:", error);
+        setExamsError(
+          error.message || "Failed to load exams. Please try again later."
+        );
+      } finally {
+        setIsLoadingExams(false);
+      }
+    };
+
+    fetchExams();
+  }, []);
+
+  // Filter exams based on selected grade
+  useEffect(() => {
+    if (formData.grade) {
+      const selectedGrade = parseInt(formData.grade, 10);
+      const filtered = exams.filter((exam) => exam.grade === selectedGrade);
+      setFilteredExams(filtered);
+
+      // Remove selected exams that don't match the new grade
+      setFormData((prev) => ({
+        ...prev,
+        exams: prev.exams.filter((examId) => {
+          const exam = exams.find((e) => e.exam_overview_id === examId);
+          return exam && exam.grade === selectedGrade;
+        }),
+      }));
+    } else {
+      // If no grade selected, show all exams
+      setFilteredExams(exams);
+    }
+  }, [formData.grade, exams]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        examsDropdownRef.current &&
+        !examsDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExamsDropdownOpen(false);
+      }
+    };
+
+    if (isExamsDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isExamsDropdownOpen]);
+
+  const toggleExam = (examOverviewId: number) => {
+    setFormData((prev) => {
+      const currentExams = prev.exams;
+      const isSelected = currentExams.includes(examOverviewId);
+
+      if (isSelected) {
+        return {
+          ...prev,
+          exams: currentExams.filter((exam) => exam !== examOverviewId),
+        };
+      } else {
+        return {
+          ...prev,
+          exams: [...currentExams, examOverviewId],
+        };
+      }
+    });
+    setErrors((prev) => ({ ...prev, exams: undefined }));
+    if (apiError) setApiError("");
+  };
+
+  const getDisplayText = () => {
+    if (formData.exams.length === 0) {
+      return formData.grade ? "Select exams for your grade" : "Select exams";
+    }
+    if (formData.exams.length === 1) {
+      const exam = exams.find(
+        (exam) => exam.exam_overview_id === formData.exams[0]
+      );
+      if (exam) {
+        return `${exam.exam} - Level ${exam.level}`;
+      }
+      return "Selected exam";
+    }
+    return `${formData.exams.length} exams selected`;
+  };
+
+  const getExamLabel = (examOverviewId: number) => {
+    const exam = exams.find((exam) => exam.exam_overview_id === examOverviewId);
+    if (exam) {
+      return `${exam.exam} - Level ${exam.level}`;
+    }
+    return `Exam ID: ${examOverviewId}`;
+  };
 
   const validate = (): Errors => {
     const newErrors: Errors = {};
@@ -108,13 +266,14 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      // Prepare data for API - matching Python Streamlit format exactly
+      // Prepare data for API - matching FastAPI backend format
       const requestData = {
         first_name: formData.firstName,
         last_name: formData.lastName,
         email: formData.email,
         password: formData.password,
         grade: parseInt(formData.grade),
+        exam_overview_id: formData.exams, // Array of exam_overview_id values (numbers)
         date_of_birth: formData.dob,
         country_code: formData.phoneCode,
         phone_number: formData.phone,
@@ -127,6 +286,7 @@ export default function SignupPage() {
       const apiUrl = getApiUrl(API_ENDPOINTS.SIGNUP);
       console.log("API URL:", apiUrl);
       console.log("Request Data:", requestData);
+      console.log("Exam Overview IDs:", requestData.exam_overview_id);
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -183,6 +343,7 @@ export default function SignupPage() {
           email: "",
           password: "",
           grade: "",
+          exams: [],
           dob: "",
           phoneCode: "+91",
           phone: "",
@@ -486,6 +647,145 @@ export default function SignupPage() {
                 </p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="exams"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
+              Exams
+            </label>
+            <div className="relative" ref={examsDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsExamsDropdownOpen(!isExamsDropdownOpen)}
+                className={`w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white flex items-center justify-between ${
+                  errors.exams ? "border-red-500" : "border-gray-300"
+                } ${
+                  formData.exams.length > 0 ? "text-gray-900" : "text-gray-500"
+                }`}
+                aria-invalid={!!errors.exams}
+                aria-describedby={errors.exams ? "exams-error" : undefined}
+                aria-haspopup="listbox"
+                aria-expanded={isExamsDropdownOpen}
+              >
+                <span className="truncate">{getDisplayText()}</span>
+                <svg
+                  className={`w-5 h-5 text-gray-400 transition-transform ${
+                    isExamsDropdownOpen ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+
+              {isExamsDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  <div className="py-1">
+                    {isLoadingExams ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                        Loading exams...
+                      </div>
+                    ) : examsError ? (
+                      <div className="px-4 py-3 text-sm text-red-600 text-center">
+                        {examsError}
+                      </div>
+                    ) : !formData.grade ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                        Please select your grade first to see available exams
+                      </div>
+                    ) : filteredExams.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                        No exams available for selected grade
+                      </div>
+                    ) : (
+                      filteredExams.map((exam) => {
+                        const isSelected = formData.exams.includes(
+                          exam.exam_overview_id
+                        );
+                        return (
+                          <button
+                            key={exam.exam_overview_id}
+                            type="button"
+                            onClick={() => toggleExam(exam.exam_overview_id)}
+                            className={`w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center ${
+                              isSelected ? "bg-blue-50" : ""
+                            }`}
+                          >
+                            <div className="flex items-center flex-1">
+                              <div
+                                className={`w-4 h-4 border-2 rounded mr-3 flex items-center justify-center ${
+                                  isSelected
+                                    ? "bg-blue-600 border-blue-600"
+                                    : "border-gray-300"
+                                }`}
+                              >
+                                {isSelected && (
+                                  <svg
+                                    className="w-3 h-3 text-white"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={3}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm text-gray-900 font-medium">
+                                  {exam.exam}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  Level {exam.level}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            {errors.exams && (
+              <p id="exams-error" className="mt-1 text-sm text-red-600">
+                {errors.exams}
+              </p>
+            )}
+            {!formData.grade && !errors.exams && (
+              <p className="mt-1 text-xs text-gray-500">
+                Please select your grade first to see available exams
+              </p>
+            )}
+            {formData.exams.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {formData.exams.map((examOverviewId) => {
+                  return (
+                    <span
+                      key={examOverviewId}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                    >
+                      {getExamLabel(examOverviewId)}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

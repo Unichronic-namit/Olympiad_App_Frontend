@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getApiUrl, API_ENDPOINTS } from "../../config/api";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -28,14 +30,37 @@ export default function LoginPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
         }),
+        mode: "cors",
       });
 
-      const data = await response.json();
+      console.log("Login Response Status:", response.status);
+
+      // Get response as text first (can only read body once)
+      const responseText = await response.text();
+      console.log("Login Raw Response Text:", responseText);
+
+      // Try to parse as JSON
+      let data: any;
+      try {
+        if (responseText && responseText.trim()) {
+          data = JSON.parse(responseText);
+          console.log("Login Parsed Response Data:", data);
+        } else {
+          data = {};
+          console.log("Empty response");
+        }
+      } catch (parseError: any) {
+        console.error("Failed to parse JSON:", parseError);
+        setError("Server returned invalid response format");
+        setIsLoading(false);
+        return;
+      }
 
       // Handle success - status 200 as per Python code
       if (response.status === 200) {
@@ -43,14 +68,19 @@ export default function LoginPage() {
         localStorage.setItem("authenticated", "true");
         localStorage.setItem("user_data", JSON.stringify(data));
 
-        // Redirect to dashboard (you can create this page later)
-        window.location.href = "/dashboard";
+        console.log("Login successful, redirecting to dashboard...");
+
+        // Use Next.js router to navigate without page refresh
+        router.push("/dashboard");
       } else if (response.status === 401) {
-        setError("Invalid email or password");
+        console.log("Login failed: Invalid credentials");
+        setError(data.detail || "Invalid email or password");
       } else if (response.status === 403) {
-        setError("Your account is deactivated");
+        console.log("Login failed: Account deactivated");
+        setError(data.detail || "Your account is deactivated");
       } else {
-        setError("Failed to sign in. Please try again.");
+        console.log("Login failed: Unknown error", data);
+        setError(data.detail || "Failed to sign in. Please try again.");
       }
     } catch (error) {
       console.error("Login error:", error);
