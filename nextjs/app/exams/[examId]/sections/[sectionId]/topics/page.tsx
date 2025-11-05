@@ -27,10 +27,10 @@ export default function TopicsPage() {
   const [groupedTopics, setGroupedTopics] = useState<GroupedTopic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedSyllabusId, setSelectedSyllabusId] = useState<number | null>(
-    null
-  );
-  const [difficulty, setDifficulty] = useState<string>("Easy");
+  // Track difficulty for each topic (using topic name as key)
+  const [topicDifficulties, setTopicDifficulties] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     // Check if user is authenticated
@@ -112,6 +112,13 @@ export default function TopicsPage() {
         );
 
         setGroupedTopics(grouped);
+
+        // Initialize difficulty to "Easy" for each topic
+        const initialDifficulties: Record<string, string> = {};
+        grouped.forEach((group) => {
+          initialDifficulties[group.topic] = "Easy";
+        });
+        setTopicDifficulties(initialDifficulties);
       } catch (error: any) {
         console.error("Error fetching syllabus:", error);
         setError(
@@ -127,12 +134,15 @@ export default function TopicsPage() {
     }
   }, [userData, sectionId]);
 
-  const handleStart = () => {
-    if (selectedSyllabusId && difficulty) {
-      router.push(
-        `/exams/${examId}/sections/${sectionId}/questions?syllabus_id=${selectedSyllabusId}&difficulty=${difficulty}`
-      );
-    }
+  const handleDifficultyChange = (topic: string, difficulty: string) => {
+    setTopicDifficulties((prev) => ({
+      ...prev,
+      [topic]: difficulty,
+    }));
+  };
+
+  const getTopicDifficulty = (topic: string): string => {
+    return topicDifficulties[topic] || "Easy";
   };
 
   if (!userData) {
@@ -161,37 +171,14 @@ export default function TopicsPage() {
             >
               ← Back to Sections
             </button>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  Topics & Subtopics
-                </h1>
-                <p className="text-gray-600">
-                  Select a topic or subtopic to start practicing
-                </p>
-              </div>
-
-              {/* Difficulty Dropdown - Top Right */}
-              {!isLoading && (
-                <div className="flex items-center gap-2">
-                  <label
-                    htmlFor="difficulty-filter"
-                    className="text-sm font-medium text-gray-700 whitespace-nowrap"
-                  >
-                    Difficulty Level:
-                  </label>
-                  <select
-                    id="difficulty-filter"
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer min-w-[120px]"
-                  >
-                    <option value="Easy">🟢 Easy</option>
-                    <option value="Medium">🟡 Medium</option>
-                    <option value="Hard">🔴 Hard</option>
-                  </select>
-                </div>
-              )}
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Topics & Subtopics
+              </h1>
+              <p className="text-gray-600">
+                Select a topic or subtopic to start practicing. Each topic has
+                its own difficulty level.
+              </p>
             </div>
           </div>
 
@@ -214,68 +201,97 @@ export default function TopicsPage() {
 
           {!isLoading && !error && (
             <div className="space-y-6">
-              {groupedTopics.map((group, groupIndex) => (
-                <div
-                  key={groupIndex}
-                  className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-6"
-                >
-                  {/* Topic Header */}
-                  <div className="flex items-center mb-4">
-                    <div className="text-3xl mr-3">📖</div>
-                    <h2 className="text-2xl font-bold text-gray-900">
-                      {group.topic}
-                    </h2>
-                  </div>
+              {groupedTopics.map((group, groupIndex) => {
+                const currentDifficulty = getTopicDifficulty(group.topic);
+                return (
+                  <div
+                    key={groupIndex}
+                    className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-6"
+                  >
+                    {/* Topic Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center">
+                        <div className="text-3xl mr-3">📖</div>
+                        <h2 className="text-2xl font-bold text-gray-900">
+                          {group.topic}
+                        </h2>
+                      </div>
 
-                  {/* Subtopics */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {group.syllabusItems.map((item) => (
-                      <button
-                        key={item.syllabus_id}
-                        onClick={() => {
-                          setSelectedSyllabusId(
-                            selectedSyllabusId === item.syllabus_id
-                              ? null
-                              : item.syllabus_id
-                          );
-                        }}
-                        className={`w-full text-left p-4 rounded-lg transition border-2 ${
-                          selectedSyllabusId === item.syllabus_id
-                            ? "bg-purple-50 border-purple-600 text-purple-900"
-                            : "bg-gray-50 border-gray-200 hover:bg-purple-50 hover:border-purple-300"
-                        }`}
-                      >
-                        <div className="flex items-center">
-                          <span className="text-xl mr-2">📝</span>
-                          <span className="font-medium text-gray-900">
-                            {item.subtopic || group.topic}
-                          </span>
-                          {selectedSyllabusId === item.syllabus_id && (
-                            <span className="ml-auto text-purple-600">✓</span>
-                          )}
+                      {/* Difficulty Dropdown - Top Right Corner */}
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor={`difficulty-${groupIndex}`}
+                          className="text-sm font-medium text-gray-700 whitespace-nowrap"
+                        >
+                          Difficulty:
+                        </label>
+                        <select
+                          id={`difficulty-${groupIndex}`}
+                          value={currentDifficulty}
+                          onChange={(e) =>
+                            handleDifficultyChange(group.topic, e.target.value)
+                          }
+                          className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="Easy">🟢 Easy</option>
+                          <option value="Medium">🟡 Medium</option>
+                          <option value="Hard">🔴 Hard</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Subtopics */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {group.syllabusItems.map((item) => (
+                        <div
+                          key={item.syllabus_id}
+                          className="bg-white rounded-lg border-2 border-gray-200 hover:border-blue-300 hover:shadow-md transition p-4 flex flex-col"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center flex-1">
+                              <span className="text-xl mr-2">📝</span>
+                              <span className="font-medium text-gray-900">
+                                {item.subtopic || group.topic}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Difficulty Badge - Shows the topic's difficulty */}
+                          <div className="mb-3">
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                                currentDifficulty === "Easy"
+                                  ? "bg-green-100 text-green-700"
+                                  : currentDifficulty === "Medium"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {currentDifficulty === "Easy" && "🟢"}
+                              {currentDifficulty === "Medium" && "🟡"}
+                              {currentDifficulty === "Hard" && "🔴"}
+                              <span className="ml-1">{currentDifficulty}</span>
+                            </span>
+                          </div>
+
+                          {/* Start Button */}
+                          <button
+                            onClick={() => {
+                              router.push(
+                                `/exams/${examId}/sections/${sectionId}/questions?syllabus_id=${item.syllabus_id}&difficulty=${currentDifficulty}`
+                              );
+                            }}
+                            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition duration-200 flex items-center justify-center gap-2 mt-auto"
+                          >
+                            <span>Start Practice</span>
+                            <span>→</span>
+                          </button>
                         </div>
-                      </button>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-
-              {/* Start Practice Button - Fixed at bottom */}
-              <div className="sticky bottom-0 bg-white border-t-2 border-gray-200 p-4 rounded-t-xl shadow-lg">
-                <button
-                  onClick={handleStart}
-                  disabled={!selectedSyllabusId}
-                  className={`w-full py-4 rounded-lg font-bold text-lg transition ${
-                    selectedSyllabusId
-                      ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  }`}
-                >
-                  {selectedSyllabusId
-                    ? `🚀 Start Practice (${difficulty})`
-                    : "👉 Please select a topic or subtopic"}
-                </button>
-              </div>
+                );
+              })}
             </div>
           )}
 

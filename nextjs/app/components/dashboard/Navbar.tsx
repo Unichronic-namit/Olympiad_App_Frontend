@@ -10,7 +10,7 @@ const navItems = [
   { name: "Notes", href: "/dashboard/notes", icon: "📚" },
   { name: "Practice", href: "/dashboard/practice", icon: "✏️" },
   { name: "Performance", href: "/dashboard/performance", icon: "📈" },
-  { name: "Profile", href: "/dashboard/profile", icon: "👤" },
+  { name: "Profile", href: "/profile", icon: "👤" },
 ];
 
 export default function Navbar() {
