@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormik, FieldArray, FormikProvider } from "formik";
 import { z } from "zod";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, X } from "lucide-react";
 import Navbar from "../components/dashboard/Navbar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,10 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getApiUrl, API_ENDPOINTS } from "@/app/config/api";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 type GradeExam = {
   grade: number;
-  exam: number; // exam_overview_id
+  exams: number[]; // Array of exam_overview_id values
+  isExisting?: boolean; // Flag to mark existing entries from userExams
 };
 
 type UserData = {
@@ -69,11 +71,22 @@ const userDataSchema = z.object({
   grade_exams: z
     .array(
       z.object({
-        grade: z.number().min(1).max(12),
-        exam: z.number().min(1),
+        grade: z.number().min(0).max(12), // Allow 0 for unselected grade
+        exams: z
+          .array(z.number().min(1))
+          .min(1, "At least one exam must be selected"),
+        isExisting: z.boolean().optional(),
       })
     )
-    .min(1, "At least one grade-exam combination must be selected"),
+    .min(1, "At least one grade-exam combination must be selected")
+    .refine(
+      (items) => {
+        // Filter out items with grade 0 (unselected) for validation
+        const validItems = items.filter((item) => item.grade > 0);
+        return validItems.length > 0;
+      },
+      { message: "At least one grade-exam combination must be selected" }
+    ),
   date_of_birth: z
     .string()
     .min(1, "Date of birth is required")
@@ -136,7 +149,7 @@ export default function ProfileClient() {
       first_name: "",
       last_name: "",
       email: "",
-      grade_exams: [{ grade: 8, exam: 0 }],
+      grade_exams: [{ grade: 8, exams: [], isExisting: false }],
       date_of_birth: "",
       phone_number: "",
       country_code: "+91",
@@ -152,10 +165,34 @@ export default function ProfileClient() {
         return {};
       } catch (error) {
         if (error instanceof z.ZodError) {
-          const errors: Record<string, string> = {};
+          const errors: any = {};
           error.issues.forEach((issue) => {
-            if (issue.path[0]) {
-              errors[issue.path[0].toString()] = issue.message;
+            const path = issue.path;
+            if (path.length === 0) return;
+
+            // Handle nested paths like grade_exams[0].grade or grade_exams[0].exams
+            if (path.length > 1) {
+              const [fieldName, index, nestedField] = path;
+              if (fieldName === "grade_exams" && typeof index === "number") {
+                if (!errors.grade_exams) {
+                  errors.grade_exams = [];
+                }
+                if (!errors.grade_exams[index]) {
+                  errors.grade_exams[index] = {};
+                }
+                if (nestedField) {
+                  errors.grade_exams[index][nestedField] = issue.message;
+                } else {
+                  errors.grade_exams[index] = issue.message;
+                }
+              } else {
+                // Handle other nested fields
+                const key = path.join(".");
+                errors[key] = issue.message;
+              }
+            } else {
+              // Handle simple fields
+              errors[path[0].toString()] = issue.message;
             }
           });
           return errors;
@@ -236,55 +273,83 @@ export default function ProfileClient() {
         }
 
         // 2. POST request to update user_exams
-        // Prepare user_exams payload - send array of exam_overview_id
-        const userExamsPayload = values.grade_exams
-          .filter((item) => item.exam > 0) // Only include items with valid exam IDs
-          .map((item) => ({
-            exam_overview_id: item.exam,
-          }));
+        // Prepare user_exams payload - flatten exams arrays to array of exam_overview_id integers
+        // Get all existing exam IDs to filter them out
+        const existingExamIds = userExams.map(
+          (exam: any) => exam.exam_overview_id
+        );
 
-        // Use USER_INFO endpoint for POST to update user_exams table
+        // Get all selected exam IDs from the form
+        const allSelectedExamIds = values.grade_exams.flatMap((item) =>
+          item.exams.filter((examId) => examId > 0)
+        );
+
+        // Filter out existing exam IDs to get only newly added exams
+        const newExamIds = allSelectedExamIds.filter(
+          (examId) => !existingExamIds.includes(examId)
+        );
+
+        console.log("Existing exam IDs:", existingExamIds);
+        console.log("All selected exam IDs:", allSelectedExamIds);
+        console.log("New exam IDs to add:", newExamIds);
+
+        // Use USER_EXAMS endpoint for POST to update user_exams table
         const userExamsUrl = `${getApiUrl(
-          API_ENDPOINTS.USER_INFO
+          API_ENDPOINTS.USER_EXAMS
         )}/${userIdString}`;
         console.log("Updating user exams:", userExamsUrl);
-        console.log("User exams payload:", userExamsPayload);
 
-        const userExamsResponse = await fetch(userExamsUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          mode: "cors",
-          body: JSON.stringify(userExamsPayload),
-        });
+        // Only send request if there are new exams to add
+        if (newExamIds.length > 0) {
+          console.log("Sending new exam IDs:", newExamIds);
+          const userExamsResponse = await fetch(userExamsUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+            body: JSON.stringify({ exam_overview_ids: newExamIds }),
+          });
 
-        const userExamsResponseText = await userExamsResponse.text();
-        console.log(
-          "User Exams POST Response Status:",
-          userExamsResponse.status
-        );
-        console.log("User Exams POST Response:", userExamsResponseText);
-
-        if (!userExamsResponse.ok) {
-          let errorMessage = userExamsResponseText;
-          try {
-            const errorData = JSON.parse(userExamsResponseText);
-            errorMessage =
-              errorData.detail || errorData.message || userExamsResponseText;
-          } catch {
-            // Use text as is
-          }
-          throw new Error(
-            errorMessage ||
-              `Failed to update user exams: ${userExamsResponse.status}`
+          const userExamsResponseText = await userExamsResponse.text();
+          console.log(
+            "User Exams POST Response Status:",
+            userExamsResponse.status
           );
+          console.log("User Exams POST Response:", userExamsResponseText);
+
+          if (!userExamsResponse.ok) {
+            let errorMessage = userExamsResponseText;
+            try {
+              const errorData = JSON.parse(userExamsResponseText);
+              // Handle different error response formats
+              if (typeof errorData === "object") {
+                errorMessage =
+                  errorData.detail ||
+                  errorData.message ||
+                  errorData.error ||
+                  JSON.stringify(errorData);
+              } else {
+                errorMessage = userExamsResponseText;
+              }
+            } catch {
+              // Use text as is if parsing fails
+              errorMessage =
+                userExamsResponseText || `HTTP ${userExamsResponse.status}`;
+            }
+            throw new Error(
+              errorMessage ||
+                `Failed to update user exams: ${userExamsResponse.status}`
+            );
+          }
+        } else {
+          console.log("No new exams to add, skipping POST request");
         }
 
         // Update localStorage
         const updatedUserData = { ...userData, ...values };
-        localStorage.setItem("user_data", JSON.stringify(updatedUserData));
+        // localStorage.setItem("user_data", JSON.stringify(updatedUserData));
 
         // Refresh user data from API
         const refreshedResponse = await fetch(userInfoUrl, {
@@ -434,16 +499,24 @@ export default function ProfileClient() {
         // Handle grade_exams - if not in API response, initialize with empty array or default
         let grade_exams: GradeExam[] = [];
         if (apiData.grade_exams && Array.isArray(apiData.grade_exams)) {
-          grade_exams = apiData.grade_exams;
+          // Convert old format {grade, exam} to new format {grade, exams}
+          grade_exams = apiData.grade_exams.map((item: any) => ({
+            grade: item.grade,
+            exams: item.exam ? [item.exam] : item.exams || [],
+            isExisting: false,
+          }));
         } else if (apiData.grades && Array.isArray(apiData.grades)) {
           grade_exams = apiData.grades.map((grade: number) => ({
             grade,
-            exam: 0,
+            exams: [],
+            isExisting: false,
           }));
         } else if (apiData.grade) {
-          grade_exams = [{ grade: apiData.grade, exam: 0 }];
+          grade_exams = [
+            { grade: apiData.grade, exams: [], isExisting: false },
+          ];
         } else {
-          grade_exams = [{ grade: 8, exam: 0 }];
+          grade_exams = [{ grade: 8, exams: [], isExisting: false }];
         }
 
         formik.setValues({
@@ -546,6 +619,44 @@ export default function ProfileClient() {
     }
   }, [userData]);
 
+  // Initialize grade_exams from userExams when editing starts
+  useEffect(() => {
+    if (
+      isEditing &&
+      userExams.length > 0 &&
+      formik.values.grade_exams.length === 1 &&
+      !formik.values.grade_exams[0].isExisting
+    ) {
+      const groupedByGrade = getExamsByGradeFromArray(userExams);
+      const initialGradeExams: GradeExam[] = Object.entries(groupedByGrade).map(
+        ([grade, exams]) => ({
+          grade: Number(grade),
+          exams: exams.map((e: any) => e.exam_overview_id),
+          isExisting: true,
+        })
+      );
+
+      if (initialGradeExams.length > 0) {
+        formik.setFieldValue("grade_exams", initialGradeExams);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, userExams]);
+
+  // Helper function to group exams by grade
+  const getExamsByGradeFromArray = (
+    examsArray: any[]
+  ): Record<number, any[]> => {
+    const grouped: Record<number, any[]> = {};
+    examsArray.forEach((exam: any) => {
+      if (!grouped[exam.grade]) {
+        grouped[exam.grade] = [];
+      }
+      grouped[exam.grade].push(exam);
+    });
+    return grouped;
+  };
+
   // Fetch exams from API
   useEffect(() => {
     const fetchExams = async () => {
@@ -602,19 +713,27 @@ export default function ProfileClient() {
         (userData as any).grade_exams &&
         Array.isArray((userData as any).grade_exams)
       ) {
-        grade_exams = (userData as any).grade_exams;
+        // Convert old format {grade, exam} to new format {grade, exams}
+        grade_exams = (userData as any).grade_exams.map((item: any) => ({
+          grade: item.grade,
+          exams: item.exam ? [item.exam] : item.exams || [],
+          isExisting: false,
+        }));
       } else if (
         (userData as any).grades &&
         Array.isArray((userData as any).grades)
       ) {
         grade_exams = (userData as any).grades.map((grade: number) => ({
           grade,
-          exam: 0,
+          exams: [],
+          isExisting: false,
         }));
       } else if ((userData as any).grade) {
-        grade_exams = [{ grade: (userData as any).grade, exam: 0 }];
+        grade_exams = [
+          { grade: (userData as any).grade, exams: [], isExisting: false },
+        ];
       } else {
-        grade_exams = [{ grade: 8, exam: 0 }];
+        grade_exams = [{ grade: 8, exams: [], isExisting: false }];
       }
 
       formik.setValues({
@@ -636,6 +755,24 @@ export default function ProfileClient() {
   const getFilteredExams = (grade: number) => {
     if (!grade) return [];
     return exams.filter((exam) => exam.grade === grade);
+  };
+
+  // Get available grades (excluding already used grades for new entries)
+  const getAvailableGrades = (currentIndex: number): number[] => {
+    const usedGrades = formik.values.grade_exams
+      .filter((_, idx) => idx !== currentIndex)
+      .map((item) => item.grade)
+      .filter((grade) => grade > 0); // Filter out grade 0 (unselected)
+    return Array.from({ length: 12 }, (_, i) => i + 1).filter(
+      (grade) => !usedGrades.includes(grade)
+    );
+  };
+
+  // Get registered exam IDs for a grade (from userExams)
+  const getRegisteredExamIds = (grade: number): number[] => {
+    return userExams
+      .filter((exam: any) => exam.grade === grade)
+      .map((exam: any) => exam.exam_overview_id);
   };
 
   // Group user exams by grade
@@ -1037,205 +1174,374 @@ export default function ProfileClient() {
                     <div className="col-span-2">
                       {isEditing ? (
                         <FieldArray name="grade_exams">
-                          {({ push, remove }) => (
-                            <div className="space-y-4">
-                              {formik.values.grade_exams.map(
-                                (gradeExam, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex gap-4 items-start p-4 border border-gray-200 rounded-lg bg-gray-50"
-                                  >
-                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      {/* Grade Dropdown */}
-                                      <div>
-                                        <Label className="text-sm font-medium text-gray-700 mb-1 block">
-                                          Grade
-                                        </Label>
-                                        <Select
-                                          value={gradeExam.grade.toString()}
-                                          onValueChange={(value) => {
-                                            formik.setFieldValue(
-                                              `grade_exams.${index}.grade`,
-                                              parseInt(value)
-                                            );
-                                            // Reset exam when grade changes
-                                            formik.setFieldValue(
-                                              `grade_exams.${index}.exam`,
-                                              0
-                                            );
-                                            formik.setFieldTouched(
-                                              `grade_exams.${index}`,
-                                              true
-                                            );
-                                          }}
-                                        >
-                                          <SelectTrigger
-                                            className={
-                                              formik.touched.grade_exams?.[
-                                                index
-                                              ] &&
-                                              formik.errors.grade_exams?.[
-                                                index
-                                              ] &&
-                                              typeof formik.errors.grade_exams[
-                                                index
-                                              ] === "object" &&
-                                              (
-                                                formik.errors.grade_exams[
-                                                  index
-                                                ] as any
-                                              ).grade
-                                                ? "border-red-500"
-                                                : ""
-                                            }
-                                          >
-                                            <SelectValue placeholder="Select grade" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {Array.from(
-                                              { length: 12 },
-                                              (_, i) => i + 1
-                                            ).map((grade) => (
-                                              <SelectItem
-                                                key={grade}
-                                                value={grade.toString()}
-                                              >
-                                                Grade {grade}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
+                          {({ push, remove }) => {
+                            return (
+                              <div className="space-y-4">
+                                {formik.values.grade_exams.map(
+                                  (gradeExam, index) => {
+                                    const isExisting =
+                                      gradeExam.isExisting || false;
+                                    const registeredExamIds = isExisting
+                                      ? getRegisteredExamIds(gradeExam.grade)
+                                      : [];
+                                    const filteredExams = getFilteredExams(
+                                      gradeExam.grade
+                                    );
+                                    const availableGrades = isExisting
+                                      ? [gradeExam.grade]
+                                      : getAvailableGrades(index);
 
-                                      {/* Exam Dropdown */}
-                                      <div>
-                                        <Label className="text-sm font-medium text-gray-700 mb-1 block">
-                                          Exam
-                                        </Label>
-                                        <Select
-                                          value={
-                                            gradeExam.exam
-                                              ? gradeExam.exam.toString()
-                                              : ""
-                                          }
-                                          onValueChange={(value) => {
-                                            formik.setFieldValue(
-                                              `grade_exams.${index}.exam`,
-                                              parseInt(value)
-                                            );
-                                            formik.setFieldTouched(
-                                              `grade_exams.${index}`,
-                                              true
-                                            );
-                                          }}
-                                          disabled={
-                                            !gradeExam.grade || isLoadingExams
-                                          }
-                                        >
-                                          <SelectTrigger
-                                            className={
-                                              formik.touched.grade_exams?.[
-                                                index
-                                              ] &&
-                                              formik.errors.grade_exams?.[
-                                                index
-                                              ] &&
-                                              typeof formik.errors.grade_exams[
-                                                index
-                                              ] === "object" &&
-                                              (
-                                                formik.errors.grade_exams[
-                                                  index
-                                                ] as any
-                                              ).exam
-                                                ? "border-red-500"
-                                                : ""
-                                            }
+                                    const hasNoGrade =
+                                      !isExisting && gradeExam.grade === 0;
+                                    const hasGradeButNoExams =
+                                      !isExisting &&
+                                      gradeExam.grade > 0 &&
+                                      gradeExam.exams.length === 0;
+
+                                    return (
+                                      <div
+                                        key={index}
+                                        className="relative flex flex-col gap-4 items-start p-4 border border-gray-200 rounded-lg bg-gray-50"
+                                      >
+                                        {/* Cross Icon to Remove Row - Top Right Corner for new entries */}
+                                        {!isExisting && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              remove(index);
+                                              formik.setFieldTouched(
+                                                "grade_exams",
+                                                true
+                                              );
+                                            }}
+                                            className="absolute top-2 right-2 text-gray-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors"
+                                            title="Remove"
                                           >
-                                            <SelectValue
-                                              placeholder={
-                                                !gradeExam.grade
-                                                  ? "Select grade first"
-                                                  : isLoadingExams
-                                                  ? "Loading exams..."
-                                                  : "Select exam"
+                                            <X className="h-4 w-4" />
+                                          </button>
+                                        )}
+                                        <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4">
+                                          {/* Grade Dropdown */}
+                                          <div>
+                                            <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                              Grade
+                                            </Label>
+                                            <Select
+                                              value={
+                                                gradeExam.grade > 0
+                                                  ? gradeExam.grade.toString()
+                                                  : ""
                                               }
-                                            />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {getFilteredExams(
-                                              gradeExam.grade
-                                            ).map((exam) => (
-                                              <SelectItem
-                                                key={exam.exam_overview_id}
-                                                value={exam.exam_overview_id.toString()}
+                                              onValueChange={(value) => {
+                                                formik.setFieldValue(
+                                                  `grade_exams.${index}.grade`,
+                                                  parseInt(value)
+                                                );
+                                                // Reset exams when grade changes
+                                                formik.setFieldValue(
+                                                  `grade_exams.${index}.exams`,
+                                                  []
+                                                );
+                                                // Don't mark as touched when grade is selected
+                                                // Validation will show only when button is clicked
+                                              }}
+                                              disabled={isExisting}
+                                            >
+                                              <SelectTrigger
+                                                className={
+                                                  (formik.touched.grade_exams?.[
+                                                    index
+                                                  ] &&
+                                                  formik.errors.grade_exams?.[
+                                                    index
+                                                  ] &&
+                                                  typeof formik.errors
+                                                    .grade_exams[index] ===
+                                                    "object" &&
+                                                  (
+                                                    formik.errors.grade_exams[
+                                                      index
+                                                    ] as any
+                                                  ).grade
+                                                    ? "border-red-500"
+                                                    : "") +
+                                                  (isExisting
+                                                    ? " bg-gray-100 cursor-not-allowed"
+                                                    : "")
+                                                }
                                               >
-                                                {exam.exam} - Level {exam.level}
-                                              </SelectItem>
-                                            ))}
-                                            {getFilteredExams(gradeExam.grade)
-                                              .length === 0 && (
-                                              <SelectItem
-                                                value="no-exam"
-                                                disabled
-                                              >
-                                                No exams available for this
-                                                grade
-                                              </SelectItem>
+                                                <SelectValue placeholder="Select grade" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {availableGrades.map(
+                                                  (grade) => (
+                                                    <SelectItem
+                                                      key={grade}
+                                                      value={grade.toString()}
+                                                    >
+                                                      Grade {grade}
+                                                    </SelectItem>
+                                                  )
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+
+                                          {/* Exam Selection - Multi-select for both existing and new */}
+                                          <div>
+                                            <Label className="text-sm font-medium text-gray-700 mb-1 block">
+                                              Exams
+                                            </Label>
+                                            {isExisting ? (
+                                              // Multi-select component for existing grades
+                                              <MultiSelect
+                                                options={filteredExams.map(
+                                                  (exam: any) => {
+                                                    const isRegistered =
+                                                      registeredExamIds.includes(
+                                                        exam.exam_overview_id
+                                                      );
+                                                    return {
+                                                      label: `${exam.exam} - Level ${exam.level}`,
+                                                      value:
+                                                        exam.exam_overview_id.toString(),
+                                                      subLabel: isRegistered
+                                                        ? "Registered"
+                                                        : undefined,
+                                                      isRegistered:
+                                                        isRegistered,
+                                                    };
+                                                  }
+                                                )}
+                                                value={gradeExam.exams.map(
+                                                  (id) => id.toString()
+                                                )}
+                                                onValueChange={(
+                                                  selectedValues
+                                                ) => {
+                                                  // Ensure registered exams are always included
+                                                  const selectedIds =
+                                                    selectedValues.map((v) =>
+                                                      parseInt(v)
+                                                    );
+                                                  const finalExams = [
+                                                    ...registeredExamIds, // Always include registered exams
+                                                    ...selectedIds.filter(
+                                                      (id) =>
+                                                        !registeredExamIds.includes(
+                                                          id
+                                                        )
+                                                    ), // Add non-registered selected exams
+                                                  ];
+                                                  formik.setFieldValue(
+                                                    `grade_exams.${index}.exams`,
+                                                    finalExams
+                                                  );
+                                                  formik.setFieldTouched(
+                                                    `grade_exams.${index}`,
+                                                    true
+                                                  );
+                                                }}
+                                                placeholder="Select exams"
+                                                maxCount={10}
+                                                className={
+                                                  gradeExam.grade > 0 &&
+                                                  formik.touched.grade_exams?.[
+                                                    index
+                                                  ] &&
+                                                  formik.errors.grade_exams?.[
+                                                    index
+                                                  ] &&
+                                                  typeof formik.errors
+                                                    .grade_exams[index] ===
+                                                    "object" &&
+                                                  (
+                                                    formik.errors.grade_exams[
+                                                      index
+                                                    ] as any
+                                                  ).exams
+                                                    ? "border-red-500"
+                                                    : ""
+                                                }
+                                              />
+                                            ) : (
+                                              // Multi-select component for new grades
+                                              <MultiSelect
+                                                options={filteredExams.map(
+                                                  (exam: any) => ({
+                                                    label: `${exam.exam} - Level ${exam.level}`,
+                                                    value:
+                                                      exam.exam_overview_id.toString(),
+                                                  })
+                                                )}
+                                                value={gradeExam.exams.map(
+                                                  (id) => id.toString()
+                                                )}
+                                                onValueChange={(
+                                                  selectedValues
+                                                ) => {
+                                                  const selectedIds =
+                                                    selectedValues.map((v) =>
+                                                      parseInt(v)
+                                                    );
+                                                  formik.setFieldValue(
+                                                    `grade_exams.${index}.exams`,
+                                                    selectedIds
+                                                  );
+                                                  formik.setFieldTouched(
+                                                    `grade_exams.${index}`,
+                                                    true
+                                                  );
+                                                }}
+                                                placeholder={
+                                                  !gradeExam.grade
+                                                    ? "Select grade first"
+                                                    : isLoadingExams
+                                                    ? "Loading exams..."
+                                                    : "Select exams"
+                                                }
+                                                maxCount={10}
+                                                disabled={
+                                                  !gradeExam.grade ||
+                                                  isLoadingExams
+                                                }
+                                                className={
+                                                  gradeExam.grade > 0 &&
+                                                  formik.touched.grade_exams?.[
+                                                    index
+                                                  ] &&
+                                                  formik.errors.grade_exams?.[
+                                                    index
+                                                  ] &&
+                                                  typeof formik.errors
+                                                    .grade_exams[index] ===
+                                                    "object" &&
+                                                  (
+                                                    formik.errors.grade_exams[
+                                                      index
+                                                    ] as any
+                                                  ).exams
+                                                    ? "border-red-500"
+                                                    : ""
+                                                }
+                                              />
                                             )}
-                                          </SelectContent>
-                                        </Select>
+                                            {/* Validation Error - Show below exam dropdown */}
+                                            {/* Only show exam validation error if grade is selected but exams are not */}
+                                            {gradeExam.grade > 0 &&
+                                              formik.touched.grade_exams?.[
+                                                index
+                                              ] &&
+                                              (formik.errors.grade_exams?.[
+                                                index
+                                              ] &&
+                                              typeof formik.errors.grade_exams[
+                                                index
+                                              ] === "object" &&
+                                              (
+                                                formik.errors.grade_exams[
+                                                  index
+                                                ] as any
+                                              ).exams ? (
+                                                <p className="mt-1 text-sm text-red-600">
+                                                  {
+                                                    (
+                                                      formik.errors.grade_exams[
+                                                        index
+                                                      ] as any
+                                                    ).exams
+                                                  }
+                                                </p>
+                                              ) : null)}
+                                          </div>
+                                        </div>
                                       </div>
-                                    </div>
-
-                                    {/* Remove Button */}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        remove(index);
-                                        formik.setFieldTouched(
-                                          "grade_exams",
-                                          true
-                                        );
-                                      }}
-                                      className="mt-6 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                      disabled={
-                                        formik.values.grade_exams.length === 1
-                                      }
-                                    >
-                                      Remove
-                                    </Button>
-                                  </div>
-                                )
-                              )}
-
-                              {/* Push Button */}
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                  push({ grade: 8, exam: 0 });
-                                  formik.setFieldTouched("grade_exams", true);
-                                }}
-                                className="w-full border-dashed"
-                              >
-                                + Add Grade & Exam
-                              </Button>
-
-                              {/* Validation Error */}
-                              {formik.touched.grade_exams &&
-                                formik.errors.grade_exams && (
-                                  <p className="mt-1 text-sm text-red-600">
-                                    {typeof formik.errors.grade_exams ===
-                                    "string"
-                                      ? formik.errors.grade_exams
-                                      : "Please select at least one grade-exam combination"}
-                                  </p>
+                                    );
+                                  }
                                 )}
-                            </div>
-                          )}
+
+                                {/* Show validation message after FieldArray elements if any tab has no grade */}
+                                {formik.values.grade_exams.some(
+                                  (item, idx) =>
+                                    !item.isExisting &&
+                                    item.grade === 0 &&
+                                    formik.touched.grade_exams?.[idx]
+                                ) && (
+                                  <div className="w-full mt-2">
+                                    <p className="text-sm text-red-600">
+                                      Grade & exam are required
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Push Button */}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={async () => {
+                                    // Mark all incomplete tabs as touched to show validation
+                                    formik.values.grade_exams.forEach(
+                                      (item, idx) => {
+                                        if (
+                                          !item.isExisting &&
+                                          (item.grade === 0 ||
+                                            item.exams.length === 0)
+                                        ) {
+                                          formik.setFieldTouched(
+                                            `grade_exams.${idx}`,
+                                            true
+                                          );
+                                        }
+                                      }
+                                    );
+
+                                    // Validate the current form state
+                                    const errors = await formik.validateForm();
+
+                                    // Check if there are any validation errors in grade_exams
+                                    const hasGradeExamErrors =
+                                      errors.grade_exams &&
+                                      (typeof errors.grade_exams === "string" ||
+                                        (Array.isArray(errors.grade_exams) &&
+                                          errors.grade_exams.some(
+                                            (err: any) => err !== undefined
+                                          )));
+
+                                    // Check if any incomplete tabs exist
+                                    const hasIncompleteTabs =
+                                      formik.values.grade_exams.some(
+                                        (item, idx) =>
+                                          !item.isExisting &&
+                                          (item.grade === 0 ||
+                                            item.exams.length === 0)
+                                      );
+
+                                    // Only add new tab if no validation errors and no incomplete tabs
+                                    if (
+                                      !hasGradeExamErrors &&
+                                      !hasIncompleteTabs
+                                    ) {
+                                      push({
+                                        grade: 0,
+                                        exams: [],
+                                        isExisting: false,
+                                      });
+                                      formik.setFieldTouched(
+                                        "grade_exams",
+                                        true
+                                      );
+                                    } else {
+                                      // Set errors to show validation messages
+                                      formik.setErrors(errors);
+                                    }
+                                  }}
+                                  className="w-full border-dashed"
+                                >
+                                  + Add Grade & Exam
+                                </Button>
+                              </div>
+                            );
+                          }}
                         </FieldArray>
                       ) : (
                         <div>
@@ -1267,86 +1573,28 @@ export default function ProfileClient() {
                                           </p>
                                         </div>
 
-                                        {/* Exam Field - Disabled Dropdown */}
+                                        {/* Exams Field - Display as Tags */}
                                         <div>
                                           <Label className="text-sm font-medium text-gray-700 mb-1 block">
-                                            Exam
+                                            Exams
                                           </Label>
-                                          <Select
-                                            value={
-                                              gradeExams.length > 0
-                                                ? gradeExams[0].exam_overview_id.toString()
-                                                : ""
-                                            }
-                                            disabled={true}
-                                          >
-                                            <SelectTrigger className="bg-gray-100 cursor-not-allowed">
-                                              <SelectValue
-                                                placeholder={
-                                                  gradeExams.length > 0
-                                                    ? `${gradeExams[0].exam} - Level ${gradeExams[0].level}`
-                                                    : "No exam selected"
-                                                }
-                                              />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {filteredExams.map(
-                                                (examItem: any) => {
-                                                  const isRegistered =
-                                                    gradeExams.some(
-                                                      (e: any) =>
-                                                        e.exam_overview_id ===
-                                                        examItem.exam_overview_id
-                                                    );
-                                                  return (
-                                                    <SelectItem
-                                                      key={
-                                                        examItem.exam_overview_id
-                                                      }
-                                                      value={examItem.exam_overview_id.toString()}
-                                                      className={
-                                                        isRegistered
-                                                          ? "bg-blue-50 font-medium"
-                                                          : ""
-                                                      }
-                                                    >
-                                                      {examItem.exam} - Level{" "}
-                                                      {examItem.level}
-                                                      {isRegistered && " ✓"}
-                                                    </SelectItem>
-                                                  );
-                                                }
-                                              )}
-                                              {filteredExams.length === 0 && (
-                                                <SelectItem
-                                                  value="no-exam"
-                                                  disabled
+                                          <div className="flex flex-wrap gap-2">
+                                            {gradeExams.length > 0 ? (
+                                              gradeExams.map((exam: any) => (
+                                                <span
+                                                  key={exam.exam_overview_id}
+                                                  className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
                                                 >
-                                                  No exams available for this
-                                                  grade
-                                                </SelectItem>
-                                              )}
-                                            </SelectContent>
-                                          </Select>
-                                          {/* Show all registered exams for this grade */}
-                                          {gradeExams.length > 1 && (
-                                            <div className="mt-2">
-                                              <p className="text-xs text-gray-600 mb-1">
-                                                All registered exams:
+                                                  {exam.exam} - Level{" "}
+                                                  {exam.level}
+                                                </span>
+                                              ))
+                                            ) : (
+                                              <p className="px-4 py-2 bg-gray-100 rounded-lg text-gray-500 border border-gray-200 text-sm">
+                                                No exams registered
                                               </p>
-                                              <div className="flex flex-wrap gap-2">
-                                                {gradeExams.map((exam: any) => (
-                                                  <span
-                                                    key={exam.exam_overview_id}
-                                                    className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
-                                                  >
-                                                    {exam.exam} - Level{" "}
-                                                    {exam.level}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
@@ -1358,9 +1606,14 @@ export default function ProfileClient() {
                             (userData as any).grade_exams.length > 0 ? (
                             <div className="space-y-4">
                               {(userData as any).grade_exams.map(
-                                (item: GradeExam, index: number) => {
+                                (item: any, index: number) => {
+                                  // Handle both old format (exam) and new format (exams)
+                                  const examId =
+                                    item.exam ||
+                                    (item.exams && item.exams[0]) ||
+                                    0;
                                   const exam = exams.find(
-                                    (e) => e.exam_overview_id === item.exam
+                                    (e: any) => e.exam_overview_id === examId
                                   );
                                   const filteredExams = getFilteredExams(
                                     item.grade
@@ -1382,51 +1635,22 @@ export default function ProfileClient() {
                                           </p>
                                         </div>
 
-                                        {/* Exam Field - Disabled Dropdown */}
+                                        {/* Exams Field - Display as Tags */}
                                         <div>
                                           <Label className="text-sm font-medium text-gray-700 mb-1 block">
-                                            Exam
+                                            Exams
                                           </Label>
-                                          <Select
-                                            value={
-                                              item.exam
-                                                ? item.exam.toString()
-                                                : ""
-                                            }
-                                            disabled={true}
-                                          >
-                                            <SelectTrigger className="bg-gray-100 cursor-not-allowed">
-                                              <SelectValue
-                                                placeholder={
-                                                  exam
-                                                    ? `${exam.exam} - Level ${exam.level}`
-                                                    : "No exam selected"
-                                                }
-                                              />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              {filteredExams.map((examItem) => (
-                                                <SelectItem
-                                                  key={
-                                                    examItem.exam_overview_id
-                                                  }
-                                                  value={examItem.exam_overview_id.toString()}
-                                                >
-                                                  {examItem.exam} - Level{" "}
-                                                  {examItem.level}
-                                                </SelectItem>
-                                              ))}
-                                              {filteredExams.length === 0 && (
-                                                <SelectItem
-                                                  value="no-exam"
-                                                  disabled
-                                                >
-                                                  No exams available for this
-                                                  grade
-                                                </SelectItem>
-                                              )}
-                                            </SelectContent>
-                                          </Select>
+                                          <div className="flex flex-wrap gap-2">
+                                            {exam ? (
+                                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800">
+                                                {exam.exam} - Level {exam.level}
+                                              </span>
+                                            ) : (
+                                              <p className="px-4 py-2 bg-gray-100 rounded-lg text-gray-500 border border-gray-200 text-sm">
+                                                No exam registered
+                                              </p>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
