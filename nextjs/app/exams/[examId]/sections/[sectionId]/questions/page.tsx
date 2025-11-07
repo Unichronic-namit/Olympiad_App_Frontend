@@ -29,6 +29,8 @@ function QuestionsPageContent() {
   const sectionId = params.sectionId as string;
   const syllabusId = searchParams.get("syllabus_id");
   const difficultyParam = searchParams.get("difficulty");
+  const [practiceExamAttemptDetailsId, setPracticeExamAttemptDetailsId] =
+    useState<string | null>(null);
 
   const [userData, setUserData] = useState<any>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -39,8 +41,16 @@ function QuestionsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [answers, setAnswers] = useState<boolean[]>([]); // Track correct/incorrect for each question
+  const [answeredQuestions, setAnsweredQuestions] = useState<Set<number>>(
+    new Set()
+  ); // Track which questions have been answered
+  const [questionAnswers, setQuestionAnswers] = useState<Map<number, number>>(
+    new Map()
+  ); // Track selected answer for each question
   const [showScore, setShowScore] = useState(false);
   const [startTime] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState<number>(0); // Timer counting up from zero
+  const [isTimerActive, setIsTimerActive] = useState(true);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -57,6 +67,18 @@ function QuestionsPageContent() {
     } catch (error) {
       console.error("Error parsing user data:", error);
       router.push("/login");
+    }
+
+    // Get practice_exam_attempt_details_id from localStorage
+    const storedPracticeExamAttemptDetailsId = localStorage.getItem(
+      "practice_exam_attempt_details_id"
+    );
+    if (storedPracticeExamAttemptDetailsId) {
+      setPracticeExamAttemptDetailsId(storedPracticeExamAttemptDetailsId);
+      console.log(
+        "Loaded practice_exam_attempt_details_id from localStorage:",
+        storedPracticeExamAttemptDetailsId
+      );
     }
   }, [router]);
 
@@ -129,6 +151,28 @@ function QuestionsPageContent() {
     }
   }, [userData, syllabusId, difficultyParam]);
 
+  // Timer count-up effect
+  useEffect(() => {
+    if (!isTimerActive || showScore) {
+      return;
+    }
+
+    const timerInterval = setInterval(() => {
+      setElapsedTime((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [isTimerActive, showScore]);
+
+  // Format time as MM:SS
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
   const handleAnswerSelect = (answerIndex: number) => {
     if (showResult) return; // Don't allow changing answer after submission
     setSelectedAnswer(answerIndex);
@@ -149,12 +193,133 @@ function QuestionsPageContent() {
     const newAnswers = [...answers];
     newAnswers[currentQuestionIndex] = correct;
     setAnswers(newAnswers);
+
+    // Mark question as answered and store the selected answer
+    setAnsweredQuestions((prev) => new Set(prev).add(currentQuestionIndex));
+    setQuestionAnswers((prev) =>
+      new Map(prev).set(currentQuestionIndex, selectedAnswer)
+    );
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
+    // Get current question
+    const currentQuestion =
+      questions.length > 0 ? questions[currentQuestionIndex] : null;
+
+    console.log("handleNextQuestion called");
+    console.log("practiceExamAttemptDetailsId:", practiceExamAttemptDetailsId);
+    console.log("currentQuestion:", currentQuestion);
+    console.log("selectedAnswer:", selectedAnswer);
+    console.log("currentQuestionIndex:", currentQuestionIndex);
+
+    // Save current answer before moving to next question
+    if (practiceExamAttemptDetailsId && currentQuestion) {
+      try {
+        // Convert selected answer index (0,1,2,3) to letter (A,B,C,D)
+        // If no answer selected, use empty string
+        const selectedAnswerLetter =
+          selectedAnswer !== null
+            ? String.fromCharCode(65 + selectedAnswer) // 65 is 'A'
+            : "";
+
+        // Compare selected answer with correct option
+        // correct_option is already in format "A", "B", "C", or "D"
+        const correctOption = currentQuestion.correct_option
+          ?.toUpperCase()
+          .trim();
+        const isCorrect =
+          selectedAnswerLetter !== "" &&
+          selectedAnswerLetter.toUpperCase() === correctOption;
+
+        // Set status: 1 if correct, 2 if incorrect or unanswered
+        const status = isCorrect ? 1 : 2;
+
+        const requestPayload = {
+          question_id: currentQuestion.question_id,
+          status: status,
+          selected_answer: selectedAnswerLetter,
+        };
+
+        console.log("Correct option:", correctOption);
+        console.log("Selected answer:", selectedAnswerLetter);
+        console.log("Is correct:", isCorrect);
+        console.log("Status:", status);
+
+        console.log("Saving answer with payload:", requestPayload);
+        console.log(
+          "API URL:",
+          `${getApiUrl(
+            API_ENDPOINTS.PRACTICE_EXAM_ATTEMPT_DETAILS
+          )}/${practiceExamAttemptDetailsId}`
+        );
+
+        const response = await fetch(
+          `${getApiUrl(
+            API_ENDPOINTS.PRACTICE_EXAM_ATTEMPT_DETAILS
+          )}/${practiceExamAttemptDetailsId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+            body: JSON.stringify(requestPayload),
+          }
+        );
+
+        const responseText = await response.text();
+        console.log(
+          "Practice Exam Attempt Details PUT Response Status:",
+          response.status
+        );
+        console.log(
+          "Practice Exam Attempt Details PUT Response:",
+          responseText
+        );
+
+        if (!response.ok) {
+          let errorMessage = responseText;
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage =
+              errorData.detail ||
+              errorData.message ||
+              errorData.error ||
+              responseText;
+          } catch {
+            errorMessage = responseText || `HTTP ${response.status}`;
+          }
+          console.error("Failed to save answer:", errorMessage);
+          // Don't block navigation, just log the error
+        } else {
+          console.log("Answer saved successfully");
+        }
+      } catch (error: any) {
+        console.error("Error saving answer:", error);
+        // Don't block navigation, just log the error
+      }
+    } else {
+      console.log(
+        "Skipping API call - practiceExamAttemptDetailsId or currentQuestion missing"
+      );
+    }
+
+    // Mark current question as answered if an answer was selected
+    if (selectedAnswer !== null && currentQuestion) {
+      setAnsweredQuestions((prev) => new Set(prev).add(currentQuestionIndex));
+      setQuestionAnswers((prev) =>
+        new Map(prev).set(currentQuestionIndex, selectedAnswer)
+      );
+    }
+
+    // Move to next question or show score
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setSelectedAnswer(null);
+      const nextIndex = currentQuestionIndex + 1;
+      setCurrentQuestionIndex(nextIndex);
+      // Restore the selected answer if this question was previously answered
+      const savedAnswer = questionAnswers.get(nextIndex);
+      setSelectedAnswer(savedAnswer !== undefined ? savedAnswer : null);
       setShowResult(false);
       setIsCorrect(false);
     } else {
@@ -181,6 +346,19 @@ function QuestionsPageContent() {
     setShowResult(false);
     setIsCorrect(false);
     setAnswers([]);
+    setAnsweredQuestions(new Set());
+    setQuestionAnswers(new Map());
+    setElapsedTime(0); // Reset timer to zero
+    setIsTimerActive(true);
+  };
+
+  const handleQuestionClick = (index: number) => {
+    setCurrentQuestionIndex(index);
+    // Restore the selected answer if this question was previously answered
+    const savedAnswer = questionAnswers.get(index);
+    setSelectedAnswer(savedAnswer !== undefined ? savedAnswer : null);
+    setShowResult(false);
+    setIsCorrect(false);
   };
 
   if (!userData) {
@@ -346,228 +524,285 @@ function QuestionsPageContent() {
 
       {/* Main Content Area */}
       <main className="md:ml-64">
-        <div className="container mx-auto px-4 md:px-6 py-8 max-w-4xl">
-          {/* Progress Bar */}
-          {questions.length > 0 && (
-            <div className="mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-600">
-                  Question {currentQuestionIndex + 1} of {questions.length}
-                </span>
-                <span className="text-sm text-gray-600">
-                  {Math.round(
-                    ((currentQuestionIndex + 1) / questions.length) * 100
-                  )}
-                  %
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${
-                      ((currentQuestionIndex + 1) / questions.length) * 100
-                    }%`,
-                  }}
-                ></div>
-              </div>
-            </div>
-          )}
+        <div className="flex gap-6 container mx-auto px-4 md:px-6 py-8">
+          {/* Question List Sidebar */}
+          {questions.length > 0 && !showScore && (
+            <div className="hidden lg:block w-64 shrink-0">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sticky top-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Questions
+                </h3>
+                <div className="grid grid-cols-5 gap-2 max-h-[calc(100vh-200px)] overflow-y-auto">
+                  {questions.map((question, index) => {
+                    const isAnswered = answeredQuestions.has(index);
+                    const isCurrent = currentQuestionIndex === index;
 
-          {/* Loading State */}
-          {isLoading && (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading questions...</p>
-              </div>
-            </div>
-          )}
-
-          {/* Error State */}
-          {error && !isLoading && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <p className="text-red-800">{error}</p>
-            </div>
-          )}
-
-          {/* Question Display */}
-          {!isLoading && !error && currentQuestion && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-              {/* Question Number and Difficulty */}
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <span className="text-sm text-gray-500">Question</span>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    #{currentQuestionIndex + 1}
-                  </h2>
+                    return (
+                      <button
+                        key={question.question_id}
+                        onClick={() => handleQuestionClick(index)}
+                        className={`w-10 h-10 rounded-lg font-semibold text-sm transition-all ${
+                          isCurrent
+                            ? "bg-blue-600 text-white ring-2 ring-blue-400 ring-offset-2"
+                            : isAnswered
+                            ? "bg-green-500 text-white hover:bg-green-600"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+                        }`}
+                      >
+                        {index + 1}
+                      </button>
+                    );
+                  })}
                 </div>
-                {currentQuestion.difficulty && (
-                  <span
-                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                      currentQuestion.difficulty === "easy"
-                        ? "bg-green-100 text-green-700"
-                        : currentQuestion.difficulty === "medium"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {currentQuestion.difficulty}
-                  </span>
-                )}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <div className="w-4 h-4 rounded bg-green-500"></div>
+                    <span>Answered</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                    <div className="w-4 h-4 rounded bg-gray-100 border border-gray-300"></div>
+                    <span>Not Answered</span>
+                  </div>
+                </div>
               </div>
+            </div>
+          )}
 
-              {/* Question Text */}
-              <div className="mb-8">
-                <p className="text-lg text-gray-900 leading-relaxed">
-                  {currentQuestion.question_text}
-                </p>
+          {/* Main Question Content */}
+          <div className="flex-1 max-w-4xl">
+            {/* Timer and Progress Bar */}
+            {questions.length > 0 && (
+              <div className="mb-6 space-y-4">
+                {/* Timer */}
+                <div className="flex justify-end">
+                  <div className="px-4 py-2 rounded-lg font-mono text-lg font-bold bg-blue-100 text-blue-700 border-2 border-blue-500">
+                    <span className="mr-2">⏱️</span>
+                    {formatTime(elapsedTime)}
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-gray-600">
+                      Question {currentQuestionIndex + 1} of {questions.length}
+                    </span>
+                    <span className="text-sm text-gray-600">
+                      {Math.round(
+                        ((currentQuestionIndex + 1) / questions.length) * 100
+                      )}
+                      %
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${
+                          ((currentQuestionIndex + 1) / questions.length) * 100
+                        }%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
               </div>
+            )}
 
-              {/* Options */}
-              <div className="space-y-3 mb-8">
-                {[
-                  { label: "A", text: currentQuestion.option_a },
-                  { label: "B", text: currentQuestion.option_b },
-                  { label: "C", text: currentQuestion.option_c },
-                  { label: "D", text: currentQuestion.option_d },
-                ].map((option, index) => {
-                  const correctOptionIndex =
-                    currentQuestion.correct_option
-                      ?.toUpperCase()
-                      .charCodeAt(0) - 65;
-                  let optionStyle = "";
-                  if (showResult) {
-                    if (index === correctOptionIndex) {
-                      optionStyle =
-                        "bg-green-100 border-green-500 text-green-900";
-                    } else if (
-                      index === selectedAnswer &&
-                      index !== correctOptionIndex
-                    ) {
-                      optionStyle = "bg-red-100 border-red-500 text-red-900";
-                    } else {
-                      optionStyle = "bg-gray-50 border-gray-300";
-                    }
-                  } else {
-                    optionStyle =
-                      selectedAnswer === index
-                        ? "bg-blue-100 border-blue-500 text-blue-900"
-                        : "bg-gray-50 border-gray-300 hover:bg-blue-50 cursor-pointer";
-                  }
+            {/* Loading State */}
+            {isLoading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading questions...</p>
+                </div>
+              </div>
+            )}
 
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleAnswerSelect(index)}
-                      disabled={showResult}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition ${optionStyle}`}
+            {/* Error State */}
+            {error && !isLoading && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-red-800">{error}</p>
+              </div>
+            )}
+
+            {/* Question Display */}
+            {!isLoading && !error && currentQuestion && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                {/* Question Number and Difficulty */}
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <span className="text-sm text-gray-500">Question</span>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      #{currentQuestionIndex + 1}
+                    </h2>
+                  </div>
+                  {currentQuestion.difficulty && (
+                    <span
+                      className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                        currentQuestion.difficulty === "easy"
+                          ? "bg-green-100 text-green-700"
+                          : currentQuestion.difficulty === "medium"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
                     >
-                      <div className="flex items-center">
-                        <span className="font-semibold mr-3">
-                          {option.label}.
-                        </span>
-                        <span>{option.text}</span>
-                        {showResult && index === correctOptionIndex && (
-                          <span className="ml-auto text-green-700 font-semibold">
-                            ✓ Correct
-                          </span>
-                        )}
-                        {showResult &&
-                          index === selectedAnswer &&
-                          index !== correctOptionIndex && (
-                            <span className="ml-auto text-red-700 font-semibold">
-                              ✗ Your Answer
-                            </span>
-                          )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      {currentQuestion.difficulty}
+                    </span>
+                  )}
+                </div>
 
-              {/* Result Message */}
-              {showResult && (
-                <div
-                  className={`p-4 rounded-lg mb-6 ${
-                    isCorrect
-                      ? "bg-green-50 border border-green-200"
-                      : "bg-red-50 border border-red-200"
-                  }`}
-                >
-                  <p
-                    className={`font-semibold ${
-                      isCorrect ? "text-green-800" : "text-red-800"
-                    }`}
-                  >
-                    {isCorrect
-                      ? "✓ Correct! Well done!"
-                      : "✗ Incorrect. The correct answer is shown above."}
+                {/* Question Text */}
+                <div className="mb-8">
+                  <p className="text-lg text-gray-900 leading-relaxed">
+                    {currentQuestion.question_text}
                   </p>
                 </div>
-              )}
 
-              {/* Solution */}
-              {showResult && !isCorrect && currentQuestion.solution && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-                  <h3 className="font-semibold text-blue-900 mb-2">
-                    Solution:
-                  </h3>
-                  <p className="text-blue-800">{currentQuestion.solution}</p>
+                {/* Options */}
+                <div className="space-y-3 mb-8">
+                  {[
+                    { label: "A", text: currentQuestion.option_a },
+                    { label: "B", text: currentQuestion.option_b },
+                    { label: "C", text: currentQuestion.option_c },
+                    { label: "D", text: currentQuestion.option_d },
+                  ].map((option, index) => {
+                    const correctOptionIndex =
+                      currentQuestion.correct_option
+                        ?.toUpperCase()
+                        .charCodeAt(0) - 65;
+                    let optionStyle = "";
+                    if (showResult) {
+                      if (index === correctOptionIndex) {
+                        optionStyle =
+                          "bg-green-100 border-green-500 text-green-900";
+                      } else if (
+                        index === selectedAnswer &&
+                        index !== correctOptionIndex
+                      ) {
+                        optionStyle = "bg-red-100 border-red-500 text-red-900";
+                      } else {
+                        optionStyle = "bg-gray-50 border-gray-300";
+                      }
+                    } else {
+                      optionStyle =
+                        selectedAnswer === index
+                          ? "bg-blue-100 border-blue-500 text-blue-900"
+                          : "bg-gray-50 border-gray-300 hover:bg-blue-50 cursor-pointer";
+                    }
+
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleAnswerSelect(index)}
+                        disabled={showResult}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition ${optionStyle}`}
+                      >
+                        <div className="flex items-center">
+                          <span className="font-semibold mr-3">
+                            {option.label}.
+                          </span>
+                          <span>{option.text}</span>
+                          {showResult && index === correctOptionIndex && (
+                            <span className="ml-auto text-green-700 font-semibold">
+                              ✓ Correct
+                            </span>
+                          )}
+                          {showResult &&
+                            index === selectedAnswer &&
+                            index !== correctOptionIndex && (
+                              <span className="ml-auto text-red-700 font-semibold">
+                                ✗ Your Answer
+                              </span>
+                            )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-4">
-                {!showResult ? (
-                  <button
-                    onClick={handleSubmitAnswer}
-                    disabled={selectedAnswer === null}
-                    className={`flex-1 py-3 rounded-lg font-semibold transition ${
-                      selectedAnswer !== null
-                        ? "bg-blue-600 hover:bg-blue-700 text-white"
-                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                {/* Result Message */}
+                {showResult && (
+                  <div
+                    className={`p-4 rounded-lg mb-6 ${
+                      isCorrect
+                        ? "bg-green-50 border border-green-200"
+                        : "bg-red-50 border border-red-200"
                     }`}
                   >
-                    Submit Answer
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleNextQuestion}
-                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition"
-                  >
-                    {currentQuestionIndex < questions.length - 1
-                      ? "Next Question"
-                      : "Finish"}
-                  </button>
+                    <p
+                      className={`font-semibold ${
+                        isCorrect ? "text-green-800" : "text-red-800"
+                      }`}
+                    >
+                      {isCorrect
+                        ? "✓ Correct! Well done!"
+                        : "✗ Incorrect. The correct answer is shown above."}
+                    </p>
+                  </div>
                 )}
-              </div>
-            </div>
-          )}
 
-          {/* Empty State */}
-          {!isLoading && !error && questions.length === 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-              <div className="text-6xl mb-4">❓</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                No Questions Available
-              </h3>
-              <p className="text-gray-600 mb-6">
-                {difficultyParam
-                  ? `No ${difficultyParam} difficulty questions found for the selected syllabus item.`
-                  : "No questions found for the selected syllabus item."}
-              </p>
-              <button
-                onClick={() =>
-                  router.push(`/exams/${examId}/sections/${sectionId}/topics`)
-                }
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition duration-200 inline-flex items-center gap-2"
-              >
-                <span>←</span>
-                <span>Back to Topics</span>
-              </button>
-            </div>
-          )}
+                {/* Solution */}
+                {showResult && !isCorrect && currentQuestion.solution && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                    <h3 className="font-semibold text-blue-900 mb-2">
+                      Solution:
+                    </h3>
+                    <p className="text-blue-800">{currentQuestion.solution}</p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-4">
+                  {!showResult ? (
+                    <button
+                      onClick={handleSubmitAnswer}
+                      disabled={selectedAnswer === null}
+                      className={`flex-1 py-3 rounded-lg font-semibold transition ${
+                        selectedAnswer !== null
+                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      Submit Answer
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleNextQuestion}
+                      className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition"
+                    >
+                      {currentQuestionIndex < questions.length - 1
+                        ? "Next Question"
+                        : "Finish"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isLoading && !error && questions.length === 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                <div className="text-6xl mb-4">❓</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  No Questions Available
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {difficultyParam
+                    ? `No ${difficultyParam} difficulty questions found for the selected syllabus item.`
+                    : "No questions found for the selected syllabus item."}
+                </p>
+                <button
+                  onClick={() =>
+                    router.push(`/exams/${examId}/sections/${sectionId}/topics`)
+                  }
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition duration-200 inline-flex items-center gap-2"
+                >
+                  <span>←</span>
+                  <span>Back to Topics</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
