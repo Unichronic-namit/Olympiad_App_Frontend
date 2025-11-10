@@ -145,6 +145,123 @@ export default function TopicsPage() {
     return topicDifficulties[topic] || "Easy";
   };
 
+  const handleStartPractice = async (
+    syllabusId: number,
+    difficulty: string
+  ) => {
+    try {
+      // Get user_id from userData
+      if (!userData || !userData.user_id) {
+        console.error("User ID not found");
+        setError("User ID not found. Please login again.");
+        return;
+      }
+
+      // Prepare request payload - convert difficulty to lowercase for API
+      const requestPayload = {
+        user_id: parseInt(userData.user_id),
+        exam_overview_id: parseInt(examId),
+        section_id: parseInt(sectionId),
+        syllabus_id: syllabusId,
+        difficulty: difficulty.toLowerCase(), // Convert to lowercase for API
+      };
+
+      console.log("Starting practice with payload:", requestPayload);
+      console.log("API URL:", getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM));
+
+      // Call POST API
+      const response = await fetch(
+        getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+          body: JSON.stringify(requestPayload),
+        }
+      );
+
+      const responseText = await response.text();
+      console.log("User Practice Exam POST Response Status:", response.status);
+      console.log("User Practice Exam POST Response:", responseText);
+
+      let practiceExamAttemptDetailsId: number | null = null;
+
+      if (!response.ok) {
+        let errorMessage = responseText;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage =
+            errorData.detail ||
+            errorData.message ||
+            errorData.error ||
+            responseText;
+        } catch {
+          // Use text as is if parsing fails
+          errorMessage = responseText || `HTTP ${response.status}`;
+        }
+        console.error("Failed to start practice:", errorMessage);
+        // Don't block navigation, just log the error
+        // You can uncomment the line below if you want to show error and prevent navigation
+        // setError(errorMessage);
+      } else {
+        console.log("Practice session started successfully");
+        // Parse response to get practice_exam_attempt_details_id
+        try {
+          const responseData = responseText ? JSON.parse(responseText) : {};
+          // Try different possible response formats
+          practiceExamAttemptDetailsId =
+            responseData.practice_exam_attempt_details_id ||
+            responseData.id ||
+            responseData.attempt_id ||
+            (Array.isArray(responseData) && responseData.length > 0
+              ? responseData[0].practice_exam_attempt_details_id ||
+                responseData[0].id
+              : null);
+          console.log(
+            "Practice Exam Attempt Details ID:",
+            practiceExamAttemptDetailsId
+          );
+
+          // Store practice_exam_attempt_details_id in localStorage
+          if (practiceExamAttemptDetailsId) {
+            localStorage.setItem(
+              "practice_exam_attempt_details_id",
+              practiceExamAttemptDetailsId.toString()
+            );
+            console.log(
+              "Stored practice_exam_attempt_details_id in localStorage:",
+              practiceExamAttemptDetailsId
+            );
+          }
+        } catch (parseError) {
+          console.error("Failed to parse response:", parseError);
+        }
+      }
+
+      // Navigate to questions page
+      const queryParams = new URLSearchParams({
+        syllabus_id: syllabusId.toString(),
+        difficulty: difficulty,
+      });
+      router.push(
+        `/exams/${examId}/sections/${sectionId}/questions?${queryParams.toString()}`
+      );
+    } catch (error: any) {
+      console.error("Error starting practice:", error);
+      // Don't block navigation, just log the error
+      // You can uncomment the line below if you want to show error and prevent navigation
+      // setError(error.message || "Failed to start practice. Please try again.");
+
+      // Still navigate even if API call fails
+      router.push(
+        `/exams/${examId}/sections/${sectionId}/questions?syllabus_id=${syllabusId}&difficulty=${difficulty}`
+      );
+    }
+  };
+
   if (!userData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -277,8 +394,9 @@ export default function TopicsPage() {
                           {/* Start Button */}
                           <button
                             onClick={() => {
-                              router.push(
-                                `/exams/${examId}/sections/${sectionId}/questions?syllabus_id=${item.syllabus_id}&difficulty=${currentDifficulty}`
+                              handleStartPractice(
+                                item.syllabus_id,
+                                currentDifficulty
                               );
                             }}
                             className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition duration-200 flex items-center justify-center gap-2 mt-auto"

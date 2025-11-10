@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import ProfileClient from "./ProfileClient";
+import ProfileClient from "./profileClient";
 
 export const metadata: Metadata = {
   title: "Profile | Olympiad Prep",

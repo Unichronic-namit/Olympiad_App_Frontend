@@ -7,9 +7,12 @@ export const API_ENDPOINTS = {
   LOGIN: "/login",
   EXAMS: "/exams",
   USER_EXAMS: "/user_exam", // GET /user_exam/{user_id}
+  USER_INFO: "/user_info", // GET /user_info/{user_id}
   SECTIONS: "/exams", // GET /exams/{exam_overview_id}/sections
   SYLLABUS: "/sections", // GET /sections/{section_id}/syllabus
   QUESTIONS: "/syllabus", // GET /syllabus/{syllabus_id}/questions
+  USER_PRACTICE_EXAM: "/user_practice_exam", // POST /user_practice_exam
+  PRACTICE_EXAM_ATTEMPT_DETAILS: "/practice_exam_attempt_details", // PUT /practice_exam_attempt_details/{practice_exam_attempt_details_id}
 } as const;
 
 // Helper function to get full API URL
