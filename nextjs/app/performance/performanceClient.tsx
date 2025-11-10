@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/dashboard/Navbar";
+import { getApiUrl, API_ENDPOINTS } from "../config/api";
 
 type QuestionAttempt = {
   questionId: number;
@@ -63,23 +64,232 @@ export default function PerformanceClient() {
       return;
     }
 
-    try {
-      setUserData(JSON.parse(storedUserData));
+    const fetchPerformanceData = async () => {
+      try {
+        const parsedUserData = JSON.parse(storedUserData);
+        setUserData(parsedUserData);
 
-      // Load performance data from localStorage
-      // In a real app, this would come from an API
-      const savedData = localStorage.getItem("performance_data");
-      if (savedData) {
-        const data = JSON.parse(savedData);
-        setPerformanceData(data);
-        calculateStats(data);
+        if (!parsedUserData || !parsedUserData.user_id) {
+          console.error("User ID not found");
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch performance data from API
+        const response = await fetch(
+          `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
+            parsedUserData.user_id
+          }`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+          }
+        );
+
+        const responseText = await response.text();
+        console.log("Performance API Response:", responseText);
+
+        if (!response.ok) {
+          throw new Error(
+            responseText ||
+              `Failed to fetch performance data: ${response.status}`
+          );
+        }
+
+        let apiData: any;
+        try {
+          apiData = responseText ? JSON.parse(responseText) : [];
+        } catch (parseError) {
+          console.error("Failed to parse JSON:", parseError);
+          throw new Error("Invalid response from server");
+        }
+
+        // Fetch exams to get exam names
+        const examsResponse = await fetch(getApiUrl(API_ENDPOINTS.EXAMS), {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+        });
+
+        const examsText = await examsResponse.text();
+        let examsData: any[] = [];
+        if (examsResponse.ok && examsText) {
+          try {
+            const parsedExams = JSON.parse(examsText);
+            if (Array.isArray(parsedExams)) {
+              examsData = parsedExams;
+            } else {
+              examsData = parsedExams.exams || parsedExams.data || [];
+            }
+          } catch (e) {
+            console.error("Failed to parse exams:", e);
+          }
+        }
+
+        // Transform API data to PerformanceData format
+        const transformedData: Array<PerformanceData & { sortDate: string }> =
+          [];
+
+        for (const item of apiData) {
+          const attemptDetails = item.practice_exam_attempt_details;
+          if (!attemptDetails) continue;
+
+          // Find exam name
+          const exam = Array.isArray(examsData)
+            ? examsData.find(
+                (e) => e.exam_overview_id === item.exam_overview_id
+              )
+            : null;
+          const examName = exam?.exam || `Exam ${item.exam_overview_id}`;
+
+          // Fetch section name
+          let sectionName = `Section ${item.section_id}`;
+          try {
+            const sectionResponse = await fetch(
+              `${getApiUrl(API_ENDPOINTS.SECTIONS)}/${
+                item.exam_overview_id
+              }/sections`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                mode: "cors",
+              }
+            );
+            const sectionText = await sectionResponse.text();
+            if (sectionResponse.ok && sectionText) {
+              const sectionsData = JSON.parse(sectionText);
+              const sections = Array.isArray(sectionsData)
+                ? sectionsData
+                : sectionsData.sections || sectionsData.data || [];
+              const section = sections.find(
+                (s: any) => s.section_id === item.section_id
+              );
+              if (section) {
+                sectionName = section.section || sectionName;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch section:", e);
+          }
+
+          // Fetch topic name from syllabus
+          let topicName = `Topic ${item.syllabus_id}`;
+          try {
+            const syllabusResponse = await fetch(
+              `${getApiUrl(API_ENDPOINTS.SYLLABUS)}/${
+                item.section_id
+              }/syllabus`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                mode: "cors",
+              }
+            );
+            const syllabusText = await syllabusResponse.text();
+            if (syllabusResponse.ok && syllabusText) {
+              const syllabusData = JSON.parse(syllabusText);
+              const syllabusItems = Array.isArray(syllabusData)
+                ? syllabusData
+                : syllabusData.syllabus || syllabusData.data || [];
+              const syllabusItem = syllabusItems.find(
+                (s: any) => s.syllabus_id === item.syllabus_id
+              );
+              if (syllabusItem) {
+                topicName =
+                  syllabusItem.topic || syllabusItem.subtopic || topicName;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch syllabus:", e);
+          }
+
+          // Process que_ans_details
+          const queAnsDetails = attemptDetails.que_ans_details || [];
+          const correctAnswers = queAnsDetails.filter(
+            (q: any) => q.status === 1
+          ).length;
+          const incorrectAnswers = queAnsDetails.filter(
+            (q: any) => q.status === 2
+          ).length;
+          const totalQuestions = queAnsDetails.length;
+
+          // Transform question attempts
+          const questionAttempts: QuestionAttempt[] = queAnsDetails.map(
+            (q: any, index: number) => ({
+              questionId: q.question_id,
+              attemptNumber: 1,
+              selectedAnswer: q.selected_answer
+                ? q.selected_answer.toUpperCase().charCodeAt(0) - 65
+                : null,
+              correctAnswer: 0, // We don't have this in the response
+              isCorrect: q.status === 1,
+              timestamp: attemptDetails.start_time || item.created_at,
+              timeSpent: 0, // We don't have this in the response
+            })
+          );
+
+          const sortDate = attemptDetails.start_time || item.created_at;
+
+          transformedData.push({
+            id: `${item.user_practice_exam_id}-${attemptDetails.practice_exam_attempt_details_id}`,
+            examName: examName,
+            examId: item.exam_overview_id,
+            sectionId: item.section_id,
+            sectionName: sectionName,
+            syllabusId: item.syllabus_id,
+            topicName: topicName,
+            difficulty: item.difficulty,
+            score: attemptDetails.score || correctAnswers,
+            totalQuestions: totalQuestions || 0,
+            correctAnswers: correctAnswers,
+            incorrectAnswers: incorrectAnswers,
+            timeSpent: attemptDetails.total_time
+              ? Math.round(attemptDetails.total_time / 60)
+              : 0,
+            date:
+              attemptDetails.end_time ||
+              attemptDetails.start_time ||
+              item.created_at,
+            questionAttempts: questionAttempts,
+            sortDate: sortDate,
+          });
+        }
+
+        // Sort by start_time (most recent first)
+        transformedData.sort((a, b) => {
+          const dateA = new Date(a.sortDate).getTime();
+          const dateB = new Date(b.sortDate).getTime();
+          return dateB - dateA; // Descending order (most recent first)
+        });
+
+        // Remove sortDate before setting state
+        const finalData: PerformanceData[] = transformedData.map(
+          ({ sortDate, ...rest }) => rest
+        );
+
+        setPerformanceData(finalData);
+        calculateStats(finalData);
+      } catch (error) {
+        console.error("Error loading performance data:", error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Error loading data:", error);
-      router.push("/login");
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    fetchPerformanceData();
   }, [router]);
 
   const calculateStats = (data: PerformanceData[]) => {
@@ -134,7 +344,8 @@ export default function PerformanceClient() {
 
   const filteredData = performanceData.filter((item) => {
     const matchesDifficulty =
-      filterDifficulty === "all" || item.difficulty === filterDifficulty;
+      filterDifficulty === "all" ||
+      item.difficulty.toLowerCase() === filterDifficulty.toLowerCase();
 
     let matchesDate = true;
     if (filterDateRange !== "all") {
@@ -239,9 +450,9 @@ export default function PerformanceClient() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">All Difficulties</option>
-                  <option value="Easy">Easy</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Hard">Hard</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
                 </select>
               </div>
               <div>
@@ -310,9 +521,10 @@ export default function PerformanceClient() {
                   </thead>
                   <tbody>
                     {filteredData.map((item) => {
-                      const percentage = Math.round(
-                        (item.score / item.totalQuestions) * 100
-                      );
+                      const percentage =
+                        item.totalQuestions > 0
+                          ? Math.round((item.score / item.totalQuestions) * 100)
+                          : 0;
                       return (
                         <tr
                           key={item.id}
@@ -331,14 +543,15 @@ export default function PerformanceClient() {
                           <td className="py-3 px-4">
                             <span
                               className={`px-2 py-1 rounded text-xs font-medium ${
-                                item.difficulty === "Easy"
+                                item.difficulty.toLowerCase() === "easy"
                                   ? "bg-green-100 text-green-700"
-                                  : item.difficulty === "Medium"
+                                  : item.difficulty.toLowerCase() === "medium"
                                   ? "bg-yellow-100 text-yellow-700"
                                   : "bg-red-100 text-red-700"
                               }`}
                             >
-                              {item.difficulty}
+                              {item.difficulty.charAt(0).toUpperCase() +
+                                item.difficulty.slice(1).toLowerCase()}
                             </span>
                           </td>
                           <td className="py-3 px-4">
