@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/dashboard/Navbar";
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type QuestionAttempt = {
   questionId: number;
@@ -11,6 +19,7 @@ type QuestionAttempt = {
   selectedAnswer: number | null;
   correctAnswer: number;
   isCorrect: boolean;
+  status?: number; // 0 = not attempted, 1 = correct, 2 = incorrect
   timestamp: string;
   timeSpent: number; // in seconds
 };
@@ -28,7 +37,7 @@ type PerformanceData = {
   totalQuestions: number;
   correctAnswers: number;
   incorrectAnswers: number;
-  timeSpent: number; // in minutes
+  timeSpent: number; // in seconds
   date: string;
   questionAttempts?: QuestionAttempt[];
 };
@@ -37,9 +46,29 @@ type Stats = {
   totalAttempts: number;
   averageScore: number;
   totalQuestionsAnswered: number;
-  totalTimeSpent: number;
+  totalTimeSpent: number; // in seconds
   bestScore: number;
   weakestSubject: string;
+};
+
+// Helper function to format time in hours, minutes, and seconds
+const formatTime = (totalSeconds: number): string => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const parts: string[] = [];
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds}s`);
+  }
+
+  return parts.join(" ");
 };
 
 export default function PerformanceClient() {
@@ -49,10 +78,26 @@ export default function PerformanceClient() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filterDifficulty, setFilterDifficulty] = useState("all");
-  const [filterDateRange, setFilterDateRange] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<PerformanceData | null>(
     null
   );
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [paginationInfo, setPaginationInfo] = useState<{
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+  } | null>(null);
+  const [totalAttemptsFromStats, setTotalAttemptsFromStats] = useState<
+    number | null
+  >(null);
+  const [totalTimeFromAllAttempts, setTotalTimeFromAllAttempts] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     // Check authentication
@@ -75,20 +120,35 @@ export default function PerformanceClient() {
           return;
         }
 
-        // Fetch performance data from API
-        const response = await fetch(
-          `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
-            parsedUserData.user_id
-          }`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            mode: "cors",
-          }
-        );
+        // Build query parameters for API call
+        const queryParams = new URLSearchParams({
+          page: currentPage.toString(),
+          page_size: itemsPerPage.toString(),
+        });
+
+        // Add search parameter if provided
+        if (searchQuery.trim()) {
+          queryParams.append("search", searchQuery.trim());
+        }
+
+        // Add difficulty filter if not "all"
+        if (filterDifficulty !== "all") {
+          queryParams.append("difficulty", filterDifficulty);
+        }
+
+        // Fetch performance data from API with pagination, search, and filters
+        const apiUrl = `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
+          parsedUserData.user_id
+        }?${queryParams.toString()}`;
+
+        const response = await fetch(apiUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+        });
 
         const responseText = await response.text();
         console.log("Performance API Response:", responseText);
@@ -100,37 +160,22 @@ export default function PerformanceClient() {
           );
         }
 
-        let apiData: any;
+        let apiResponse: any;
         try {
-          apiData = responseText ? JSON.parse(responseText) : [];
+          apiResponse = responseText
+            ? JSON.parse(responseText)
+            : { data: [], pagination: null };
         } catch (parseError) {
           console.error("Failed to parse JSON:", parseError);
           throw new Error("Invalid response from server");
         }
 
-        // Fetch exams to get exam names
-        const examsResponse = await fetch(getApiUrl(API_ENDPOINTS.EXAMS), {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          mode: "cors",
-        });
+        // Extract data and pagination from response
+        const apiData = apiResponse.data || [];
+        const pagination = apiResponse.pagination || null;
 
-        const examsText = await examsResponse.text();
-        let examsData: any[] = [];
-        if (examsResponse.ok && examsText) {
-          try {
-            const parsedExams = JSON.parse(examsText);
-            if (Array.isArray(parsedExams)) {
-              examsData = parsedExams;
-            } else {
-              examsData = parsedExams.exams || parsedExams.data || [];
-            }
-          } catch (e) {
-            console.error("Failed to parse exams:", e);
-          }
+        if (pagination) {
+          setPaginationInfo(pagination);
         }
 
         // Transform API data to PerformanceData format
@@ -141,80 +186,22 @@ export default function PerformanceClient() {
           const attemptDetails = item.practice_exam_attempt_details;
           if (!attemptDetails) continue;
 
-          // Find exam name
-          const exam = Array.isArray(examsData)
-            ? examsData.find(
-                (e) => e.exam_overview_id === item.exam_overview_id
-              )
-            : null;
-          const examName = exam?.exam || `Exam ${item.exam_overview_id}`;
+          // Get exam name from exam_overview in response
+          const examName =
+            item.exam_overview?.exam || `Exam ${item.exam_overview_id}`;
 
-          // Fetch section name
-          let sectionName = `Section ${item.section_id}`;
-          try {
-            const sectionResponse = await fetch(
-              `${getApiUrl(API_ENDPOINTS.SECTIONS)}/${
-                item.exam_overview_id
-              }/sections`,
-              {
-                method: "GET",
-                headers: {
-                  "Content-Type": "application/json",
-                  Accept: "application/json",
-                },
-                mode: "cors",
-              }
-            );
-            const sectionText = await sectionResponse.text();
-            if (sectionResponse.ok && sectionText) {
-              const sectionsData = JSON.parse(sectionText);
-              const sections = Array.isArray(sectionsData)
-                ? sectionsData
-                : sectionsData.sections || sectionsData.data || [];
-              const section = sections.find(
-                (s: any) => s.section_id === item.section_id
-              );
-              if (section) {
-                sectionName = section.section || sectionName;
-              }
-            }
-          } catch (e) {
-            console.error("Failed to fetch section:", e);
-          }
+          // Get section name from section in response
+          const sectionName =
+            item.section?.section || `Section ${item.section_id}`;
 
-          // Fetch topic name from syllabus
-          let topicName = `Topic ${item.syllabus_id}`;
-          try {
-            const syllabusResponse = await fetch(
-              `${getApiUrl(API_ENDPOINTS.SYLLABUS)}/${
-                item.section_id
-              }/syllabus`,
-              {
-                method: "GET",
-                headers: {
-                  "Content-Type": "application/json",
-                  Accept: "application/json",
-                },
-                mode: "cors",
-              }
-            );
-            const syllabusText = await syllabusResponse.text();
-            if (syllabusResponse.ok && syllabusText) {
-              const syllabusData = JSON.parse(syllabusText);
-              const syllabusItems = Array.isArray(syllabusData)
-                ? syllabusData
-                : syllabusData.syllabus || syllabusData.data || [];
-              const syllabusItem = syllabusItems.find(
-                (s: any) => s.syllabus_id === item.syllabus_id
-              );
-              if (syllabusItem) {
-                topicName =
-                  syllabusItem.topic || syllabusItem.subtopic || topicName;
-              }
-            }
-          } catch (e) {
-            console.error("Failed to fetch syllabus:", e);
-          }
+          // Get topic name from syllabus in response
+          const topicName = item.syllabus?.topic || `Topic ${item.syllabus_id}`;
+          // Get subtopic name from syllabus in response
+          const subtopicName = item.syllabus?.subtopic || null;
+          // Combine topic and subtopic for display
+          const displayName = subtopicName
+            ? `${topicName} - ${subtopicName}`
+            : topicName;
 
           // Process que_ans_details
           const queAnsDetails = attemptDetails.que_ans_details || [];
@@ -236,6 +223,7 @@ export default function PerformanceClient() {
                 : null,
               correctAnswer: 0, // We don't have this in the response
               isCorrect: q.status === 1,
+              status: q.status, // Store status to check for not attempted
               timestamp: attemptDetails.start_time || item.created_at,
               timeSpent: 0, // We don't have this in the response
             })
@@ -250,15 +238,13 @@ export default function PerformanceClient() {
             sectionId: item.section_id,
             sectionName: sectionName,
             syllabusId: item.syllabus_id,
-            topicName: topicName,
+            topicName: displayName,
             difficulty: item.difficulty,
             score: attemptDetails.score || correctAnswers,
             totalQuestions: totalQuestions || 0,
             correctAnswers: correctAnswers,
             incorrectAnswers: incorrectAnswers,
-            timeSpent: attemptDetails.total_time
-              ? Math.round(attemptDetails.total_time / 60)
-              : 0,
+            timeSpent: attemptDetails.total_time || 0, // Store in seconds
             date:
               attemptDetails.end_time ||
               attemptDetails.start_time ||
@@ -281,7 +267,63 @@ export default function PerformanceClient() {
         );
 
         setPerformanceData(finalData);
-        calculateStats(finalData);
+
+        // Fetch stats separately without filters/search to get total attempts and total time
+        const statsUrl = `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
+          parsedUserData.user_id
+        }?page=1&page_size=1000`; // Large page size to get all records for stats
+
+        const statsResponse = await fetch(statsUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+        });
+
+        if (statsResponse.ok) {
+          const statsResponseText = await statsResponse.text();
+          try {
+            const statsApiResponse = statsResponseText
+              ? JSON.parse(statsResponseText)
+              : { data: [], pagination: null };
+            const statsPagination = statsApiResponse.pagination || null;
+            const statsData = statsApiResponse.data || [];
+
+            // Calculate total time from all attempts (unfiltered)
+            let calculatedTotalTime = 0;
+            statsData.forEach((item: any) => {
+              const attemptDetails = item.practice_exam_attempt_details;
+              if (attemptDetails && attemptDetails.total_time) {
+                calculatedTotalTime += attemptDetails.total_time;
+              }
+            });
+
+            // Store total time from all attempts
+            setTotalTimeFromAllAttempts(calculatedTotalTime);
+
+            if (statsPagination) {
+              // Store total attempts from stats API (unfiltered)
+              setTotalAttemptsFromStats(statsPagination.total);
+              // Calculate stats with the unfiltered total and total time
+              calculateStats(
+                finalData,
+                statsPagination.total,
+                calculatedTotalTime
+              );
+            } else {
+              // Fallback if no pagination info
+              calculateStats(finalData, null, calculatedTotalTime);
+            }
+          } catch (parseError) {
+            console.error("Failed to parse stats JSON:", parseError);
+            calculateStats(finalData, null, 0);
+          }
+        } else {
+          // Fallback if stats API fails
+          calculateStats(finalData, null, 0);
+        }
       } catch (error) {
         console.error("Error loading performance data:", error);
       } finally {
@@ -290,28 +332,48 @@ export default function PerformanceClient() {
     };
 
     fetchPerformanceData();
-  }, [router]);
+  }, [router, currentPage, filterDifficulty, searchQuery]);
 
-  const calculateStats = (data: PerformanceData[]) => {
+  const calculateStats = (
+    data: PerformanceData[],
+    totalAttemptsFromApi?: number | null,
+    totalTimeFromAllAttempts?: number
+  ) => {
+    // Use stored total attempts from stats API if available, otherwise use provided value or data length
+    const totalAttempts =
+      totalAttemptsFromStats !== null
+        ? totalAttemptsFromStats
+        : totalAttemptsFromApi !== null && totalAttemptsFromApi !== undefined
+        ? totalAttemptsFromApi
+        : data.length;
+
     if (data.length === 0) {
       setStats({
-        totalAttempts: 0,
+        totalAttempts: totalAttempts,
         averageScore: 0,
         totalQuestionsAnswered: 0,
-        totalTimeSpent: 0,
+        totalTimeSpent: totalTimeFromAllAttempts ?? 0,
         bestScore: 0,
         weakestSubject: "N/A",
       });
       return;
     }
-
-    const totalAttempts = data.length;
     const totalQuestions = data.reduce((sum, d) => sum + d.totalQuestions, 0);
     const totalCorrect = data.reduce((sum, d) => sum + d.correctAnswers, 0);
-    const totalTime = data.reduce((sum, d) => sum + d.timeSpent, 0);
-    const scores = data.map((d) => (d.score / d.totalQuestions) * 100);
-    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const bestScore = Math.max(...scores);
+    // Use totalTimeFromAllAttempts if filter is "all", otherwise use filtered data
+    const filteredTime = data.reduce((sum, d) => sum + d.timeSpent, 0);
+    const totalTime: number =
+      filterDifficulty === "all" &&
+      totalTimeFromAllAttempts !== null &&
+      totalTimeFromAllAttempts !== undefined
+        ? totalTimeFromAllAttempts
+        : filteredTime; // Total in seconds
+    const scores = data
+      .filter((d) => d.totalQuestions > 0) // Filter out zero division cases
+      .map((d) => (d.score / d.totalQuestions) * 100);
+    const averageScore =
+      scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
 
     // Find weakest subject (subject with lowest average score)
     const subjectScores: Record<string, number[]> = {};
@@ -319,16 +381,21 @@ export default function PerformanceClient() {
       if (!subjectScores[d.examName]) {
         subjectScores[d.examName] = [];
       }
-      subjectScores[d.examName].push((d.score / d.totalQuestions) * 100);
+      // Only add score if totalQuestions > 0 to avoid NaN
+      if (d.totalQuestions > 0) {
+        subjectScores[d.examName].push((d.score / d.totalQuestions) * 100);
+      }
     });
 
     let weakestSubject = "N/A";
     let lowestAvg = 100;
     Object.entries(subjectScores).forEach(([subject, scores]) => {
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-      if (avg < lowestAvg) {
-        lowestAvg = avg;
-        weakestSubject = subject;
+      if (scores.length > 0) {
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        if (avg < lowestAvg && !isNaN(avg)) {
+          lowestAvg = avg;
+          weakestSubject = subject;
+        }
       }
     });
 
@@ -347,18 +414,25 @@ export default function PerformanceClient() {
       filterDifficulty === "all" ||
       item.difficulty.toLowerCase() === filterDifficulty.toLowerCase();
 
-    let matchesDate = true;
-    if (filterDateRange !== "all") {
-      const itemDate = new Date(item.date);
-      const now = new Date();
-      const daysAgo = parseInt(filterDateRange);
-
-      matchesDate =
-        itemDate.getTime() >= now.getTime() - daysAgo * 24 * 60 * 60 * 1000;
-    }
-
-    return matchesDifficulty && matchesDate;
+    return matchesDifficulty;
   });
+
+  // Use API pagination info if available, otherwise calculate from filtered data
+  const totalPages =
+    paginationInfo?.total_pages ||
+    Math.ceil(filteredData.length / itemsPerPage);
+  const startIndex = paginationInfo
+    ? (paginationInfo.page - 1) * paginationInfo.page_size
+    : (currentPage - 1) * itemsPerPage;
+  const endIndex = paginationInfo
+    ? startIndex + paginationInfo.page_size
+    : startIndex + itemsPerPage;
+  const paginatedData = filteredData; // Data is already paginated from API
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterDifficulty, searchQuery]);
 
   if (isLoading) {
     return (
@@ -428,7 +502,7 @@ export default function PerformanceClient() {
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Time Spent</p>
                     <p className="text-3xl font-bold text-gray-900">
-                      {stats.totalTimeSpent}m
+                      {formatTime(stats.totalTimeSpent)}
                     </p>
                   </div>
                   <div className="text-4xl">⏰</div>
@@ -437,38 +511,41 @@ export default function PerformanceClient() {
             </div>
           )}
 
-          {/* Filters */}
+          {/* Search and Filters */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Filter by Difficulty
+                  Search
                 </label>
-                <select
-                  value={filterDifficulty}
-                  onChange={(e) => setFilterDifficulty(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Difficulties</option>
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
+                <Input
+                  type="text"
+                  placeholder="Search by exam, topic, or section..."
+                  value={searchQuery}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSearchQuery(e.target.value)
+                  }
+                  className="w-full"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Filter by Date
+                  Filter by Difficulty
                 </label>
-                <select
-                  value={filterDateRange}
-                  onChange={(e) => setFilterDateRange(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                <Select
+                  value={filterDifficulty}
+                  onValueChange={setFilterDifficulty}
                 >
-                  <option value="all">All Time</option>
-                  <option value="7">Last 7 days</option>
-                  <option value="30">Last 30 days</option>
-                  <option value="90">Last 90 days</option>
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All Difficulties" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Difficulties</SelectItem>
+                    <SelectItem value="easy">Easy</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="hard">Hard</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -520,11 +597,11 @@ export default function PerformanceClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredData.map((item) => {
+                    {paginatedData.map((item) => {
                       const percentage =
                         item.totalQuestions > 0
                           ? Math.round((item.score / item.totalQuestions) * 100)
-                          : 0;
+                          : null;
                       return (
                         <tr
                           key={item.id}
@@ -559,17 +636,23 @@ export default function PerformanceClient() {
                               <span className="font-semibold text-gray-900">
                                 {item.score}/{item.totalQuestions}
                               </span>
-                              <span
-                                className={`ml-2 text-sm font-medium ${
-                                  percentage >= 80
-                                    ? "text-green-600"
-                                    : percentage >= 60
-                                    ? "text-yellow-600"
-                                    : "text-red-600"
-                                }`}
-                              >
-                                ({percentage}%)
-                              </span>
+                              {percentage !== null ? (
+                                <span
+                                  className={`ml-2 text-sm font-medium ${
+                                    percentage >= 80
+                                      ? "text-green-600"
+                                      : percentage >= 60
+                                      ? "text-yellow-600"
+                                      : "text-red-600"
+                                  }`}
+                                >
+                                  ({percentage}%)
+                                </span>
+                              ) : (
+                                <span className="ml-2 text-sm font-medium text-gray-500">
+                                  (-)
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="py-3 px-4 text-gray-600">
@@ -584,7 +667,7 @@ export default function PerformanceClient() {
                             </div>
                           </td>
                           <td className="py-3 px-4 text-gray-600">
-                            {item.timeSpent} min
+                            {formatTime(item.timeSpent)}
                           </td>
                           <td className="py-3 px-4 text-gray-600">
                             <div>
@@ -609,12 +692,96 @@ export default function PerformanceClient() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Showing {startIndex + 1} to{" "}
+                    {Math.min(
+                      endIndex,
+                      paginationInfo?.total || filteredData.length
+                    )}{" "}
+                    of {paginationInfo?.total || filteredData.length} results
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
+                      disabled={
+                        !paginationInfo?.has_previous && currentPage === 1
+                      }
+                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                        !paginationInfo?.has_previous && currentPage === 1
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      Previous
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                        (page) => {
+                          // Show first page, last page, current page, and pages around current
+                          if (
+                            page === 1 ||
+                            page === totalPages ||
+                            (page >= currentPage - 1 && page <= currentPage + 1)
+                          ) {
+                            return (
+                              <button
+                                key={page}
+                                onClick={() => setCurrentPage(page)}
+                                className={`px-3 py-2 rounded-lg font-medium transition ${
+                                  currentPage === page
+                                    ? "bg-blue-600 text-white"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            );
+                          } else if (
+                            page === currentPage - 2 ||
+                            page === currentPage + 2
+                          ) {
+                            return (
+                              <span key={page} className="px-2 text-gray-500">
+                                ...
+                              </span>
+                            );
+                          }
+                          return null;
+                        }
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                      }
+                      disabled={
+                        !paginationInfo?.has_next && currentPage === totalPages
+                      }
+                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                        !paginationInfo?.has_next && currentPage === totalPages
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Detailed Attempt Modal */}
           {selectedRecord && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">
                   <div className="flex items-center justify-between">
@@ -663,7 +830,7 @@ export default function PerformanceClient() {
                     <div className="bg-purple-50 rounded-lg p-4">
                       <p className="text-sm text-gray-600 mb-1">Time Spent</p>
                       <p className="text-2xl font-bold text-purple-600">
-                        {selectedRecord.timeSpent}m
+                        {formatTime(selectedRecord.timeSpent)}
                       </p>
                     </div>
                   </div>
@@ -677,86 +844,82 @@ export default function PerformanceClient() {
                       </h3>
                       <div className="space-y-3">
                         {selectedRecord.questionAttempts.map(
-                          (attempt, index) => (
-                            <div
-                              key={`${attempt.questionId}-${attempt.attemptNumber}`}
-                              className={`p-4 rounded-lg border-2 ${
-                                attempt.isCorrect
-                                  ? "bg-green-50 border-green-200"
-                                  : "bg-red-50 border-red-200"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-3">
+                          (attempt, index) => {
+                            const isNotAttempted = attempt.status === 0;
+                            const isCorrect = attempt.isCorrect;
+                            return (
+                              <div
+                                key={`${attempt.questionId}-${attempt.attemptNumber}`}
+                                className={`p-4 rounded-lg border-2 ${
+                                  isNotAttempted
+                                    ? "bg-gray-50 border-gray-300"
+                                    : isCorrect
+                                    ? "bg-green-50 border-green-200"
+                                    : "bg-red-50 border-red-200"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center gap-3">
+                                    <span
+                                      className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                        isNotAttempted
+                                          ? "bg-gray-500 text-white"
+                                          : isCorrect
+                                          ? "bg-green-600 text-white"
+                                          : "bg-red-600 text-white"
+                                      }`}
+                                    >
+                                      Question {index + 1}
+                                    </span>
+                                    <span className="text-sm text-gray-600">
+                                      {new Date(
+                                        attempt.timestamp
+                                      ).toLocaleTimeString()}
+                                    </span>
+                                  </div>
                                   <span
-                                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                      attempt.isCorrect
-                                        ? "bg-green-600 text-white"
-                                        : "bg-red-600 text-white"
+                                    className={`px-2 py-1 rounded text-xs font-medium ${
+                                      isNotAttempted
+                                        ? "bg-gray-200 text-gray-800"
+                                        : isCorrect
+                                        ? "bg-green-200 text-green-800"
+                                        : "bg-red-200 text-red-800"
                                     }`}
                                   >
-                                    Question {index + 1}
+                                    {isNotAttempted
+                                      ? "Not Attempted"
+                                      : isCorrect
+                                      ? "✓ Correct"
+                                      : "✗ Incorrect"}
                                   </span>
-                                  <span className="text-sm text-gray-600">
-                                    {new Date(
-                                      attempt.timestamp
-                                    ).toLocaleTimeString()}
-                                  </span>
                                 </div>
-                                <span
-                                  className={`px-2 py-1 rounded text-xs font-medium ${
-                                    attempt.isCorrect
-                                      ? "bg-green-200 text-green-800"
-                                      : "bg-red-200 text-red-800"
-                                  }`}
-                                >
-                                  {attempt.isCorrect
-                                    ? "✓ Correct"
-                                    : "✗ Incorrect"}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
-                                <div>
-                                  <p className="text-gray-600 mb-1">
-                                    Selected Answer
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {attempt.selectedAnswer !== null
-                                      ? String.fromCharCode(
-                                          65 + attempt.selectedAnswer
-                                        )
-                                      : "Not answered"}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-gray-600 mb-1">
-                                    Correct Answer
-                                  </p>
-                                  <p className="font-semibold text-green-600">
-                                    {String.fromCharCode(
-                                      65 + attempt.correctAnswer
-                                    )}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-gray-600 mb-1">
-                                    Attempt Number
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {attempt.attemptNumber}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-gray-600 mb-1">
-                                    Time Spent
-                                  </p>
-                                  <p className="font-semibold text-gray-900">
-                                    {attempt.timeSpent}s
-                                  </p>
+                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mt-3 text-sm">
+                                  <div>
+                                    <p className="text-gray-600 mb-1">
+                                      Selected Answer
+                                    </p>
+                                    <p className="font-semibold text-gray-900">
+                                      {attempt.selectedAnswer !== null
+                                        ? String.fromCharCode(
+                                            65 + attempt.selectedAnswer
+                                          )
+                                        : "Not answered"}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-gray-600 mb-1">
+                                      Correct Answer
+                                    </p>
+                                    <p className="font-semibold text-green-600">
+                                      {String.fromCharCode(
+                                        65 + attempt.correctAnswer
+                                      )}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )
+                            );
+                          }
                         )}
                       </div>
                     </div>

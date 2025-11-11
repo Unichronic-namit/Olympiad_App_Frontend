@@ -31,6 +31,10 @@ export default function TopicsPage() {
   const [topicDifficulties, setTopicDifficulties] = useState<
     Record<string, string>
   >({});
+  // Track question counts for each syllabus_id
+  const [questionCounts, setQuestionCounts] = useState<Record<number, number>>(
+    {}
+  );
 
   useEffect(() => {
     // Check if user is authenticated
@@ -119,6 +123,61 @@ export default function TopicsPage() {
           initialDifficulties[group.topic] = "Easy";
         });
         setTopicDifficulties(initialDifficulties);
+
+        // Fetch question counts for each syllabus item
+        const counts: Record<number, number> = {};
+        const fetchPromises = syllabusData.map(async (item) => {
+          try {
+            const questionsResponse = await fetch(
+              `${getApiUrl(API_ENDPOINTS.QUESTIONS)}/${
+                item.syllabus_id
+              }/questions`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                },
+                mode: "cors",
+              }
+            );
+
+            if (questionsResponse.ok) {
+              const questionsText = await questionsResponse.text();
+              try {
+                const questionsData = questionsText
+                  ? JSON.parse(questionsText)
+                  : [];
+                const questionsArray = Array.isArray(questionsData)
+                  ? questionsData
+                  : questionsData.questions || questionsData.data || [];
+                // Count only active questions
+                const activeQuestions = questionsArray.filter(
+                  (q: any) => q.is_active
+                );
+                counts[item.syllabus_id] = activeQuestions.length;
+              } catch (parseError) {
+                console.error(
+                  `Failed to parse questions for syllabus ${item.syllabus_id}:`,
+                  parseError
+                );
+                counts[item.syllabus_id] = 0;
+              }
+            } else {
+              counts[item.syllabus_id] = 0;
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching questions for syllabus ${item.syllabus_id}:`,
+              error
+            );
+            counts[item.syllabus_id] = 0;
+          }
+        });
+
+        // Wait for all question count fetches to complete
+        await Promise.all(fetchPromises);
+        setQuestionCounts(counts);
       } catch (error: any) {
         console.error("Error fetching syllabus:", error);
         setError(
@@ -367,9 +426,23 @@ export default function TopicsPage() {
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex items-center flex-1">
                               <span className="text-xl mr-2">📝</span>
-                              <span className="font-medium text-gray-900">
-                                {item.subtopic || group.topic}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-medium text-gray-900">
+                                  {item.subtopic || group.topic}
+                                </span>
+                                <span className="text-xs text-gray-500 mt-1">
+                                  {questionCounts[item.syllabus_id] !==
+                                  undefined
+                                    ? `${
+                                        questionCounts[item.syllabus_id]
+                                      } question${
+                                        questionCounts[item.syllabus_id] !== 1
+                                          ? "s"
+                                          : ""
+                                      }`
+                                    : "Loading..."}
+                                </span>
+                              </div>
                             </div>
                           </div>
 

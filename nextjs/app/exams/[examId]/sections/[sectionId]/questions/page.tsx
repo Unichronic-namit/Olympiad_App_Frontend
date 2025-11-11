@@ -912,6 +912,21 @@ function QuestionsPageContent() {
       setIsCorrect(false);
     }
 
+    // Check if question is already answered (green) or not answered (purple)
+    const isAnswered = answeredQuestions.has(index);
+    const isNotAnswered = notAnsweredQuestions.has(index);
+
+    // Don't make PUT API call if question is already answered (green) or not answered (purple)
+    if (isAnswered || isNotAnswered) {
+      // Just remove from not visited set if it was there
+      setNotVisitedQuestions((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+      return; // Skip the PUT API call
+    }
+
     // Remove from not visited and not answered sets when clicked (if they were there)
     setNotVisitedQuestions((prev) => {
       const newSet = new Set(prev);
@@ -924,7 +939,7 @@ function QuestionsPageContent() {
       return newSet;
     });
 
-    // Make PUT API call when clicking on a question
+    // Make PUT API call when clicking on a question (only for not visited questions)
     if (
       practiceExamAttemptDetailsId &&
       questions.length > 0 &&

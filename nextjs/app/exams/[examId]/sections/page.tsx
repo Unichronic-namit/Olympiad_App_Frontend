@@ -87,23 +87,14 @@ export default function SectionsPage() {
 
         setSections(sectionsData);
 
-        // Fetch exam info for header
-        const examResponse = await fetch(getApiUrl(API_ENDPOINTS.EXAMS), {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          mode: "cors",
-        });
-
-        const examText = await examResponse.text();
-        if (examResponse.ok && examText) {
-          const examData = JSON.parse(examText);
-          const exam = Array.isArray(examData)
-            ? examData.find((e: any) => e.exam_overview_id === parseInt(examId))
-            : null;
-          setExamInfo(exam);
+        // Extract exam info from first section (all sections have same exam, grade, level)
+        if (sectionsData.length > 0 && sectionsData[0]) {
+          const firstSection = sectionsData[0];
+          setExamInfo({
+            exam: firstSection.exam,
+            grade: firstSection.grade,
+            level: firstSection.level,
+          });
         }
       } catch (error: any) {
         console.error("Error fetching sections:", error);
