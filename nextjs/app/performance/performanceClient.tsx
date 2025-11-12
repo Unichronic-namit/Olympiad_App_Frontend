@@ -17,7 +17,7 @@ type QuestionAttempt = {
   questionId: number;
   attemptNumber: number;
   selectedAnswer: number | null;
-  correctAnswer: number;
+  correctAnswer: string | null; // Store as string (A, B, C, D) from API
   isCorrect: boolean;
   status?: number; // 0 = not attempted, 1 = correct, 2 = incorrect
   timestamp: string;
@@ -28,6 +28,8 @@ type PerformanceData = {
   id: string;
   examName: string;
   examId: number;
+  grade: number | null;
+  level: number | null;
   sectionId: number;
   sectionName: string;
   syllabusId: number;
@@ -76,12 +78,14 @@ export default function PerformanceClient() {
   const [userData, setUserData] = useState<any>(null);
   const [performanceData, setPerformanceData] = useState<PerformanceData[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  console.log("stats", stats);
   const [isLoading, setIsLoading] = useState(true);
   const [filterDifficulty, setFilterDifficulty] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<PerformanceData | null>(
     null
   );
+  console.log("selectedRecord", selectedRecord);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [paginationInfo, setPaginationInfo] = useState<{
@@ -98,6 +102,12 @@ export default function PerformanceClient() {
   const [totalTimeFromAllAttempts, setTotalTimeFromAllAttempts] = useState<
     number | null
   >(null);
+  const [apiStatistics, setApiStatistics] = useState<{
+    total_time: number;
+    best_score: number;
+    average_score: number;
+    total_attempts: number;
+  } | null>(null);
 
   useEffect(() => {
     // Check authentication
@@ -170,12 +180,18 @@ export default function PerformanceClient() {
           throw new Error("Invalid response from server");
         }
 
-        // Extract data and pagination from response
+        // Extract data, pagination, and statistics from response
         const apiData = apiResponse.data || [];
         const pagination = apiResponse.pagination || null;
+        const statistics = apiResponse.statistics || null;
 
         if (pagination) {
           setPaginationInfo(pagination);
+        }
+
+        // Store statistics from API response
+        if (statistics) {
+          setApiStatistics(statistics);
         }
 
         // Transform API data to PerformanceData format
@@ -189,6 +205,10 @@ export default function PerformanceClient() {
           // Get exam name from exam_overview in response
           const examName =
             item.exam_overview?.exam || `Exam ${item.exam_overview_id}`;
+
+          // Get grade and level from exam_overview in response
+          const grade = item.exam_overview?.grade || null;
+          const level = item.exam_overview?.level || null;
 
           // Get section name from section in response
           const sectionName =
@@ -211,7 +231,9 @@ export default function PerformanceClient() {
           const incorrectAnswers = queAnsDetails.filter(
             (q: any) => q.status === 2
           ).length;
-          const totalQuestions = queAnsDetails.length;
+          // Get total questions from questions.question_ids array length
+          const totalQuestions =
+            item.questions?.question_ids?.length || queAnsDetails.length || 0;
 
           // Transform question attempts
           const questionAttempts: QuestionAttempt[] = queAnsDetails.map(
@@ -221,7 +243,7 @@ export default function PerformanceClient() {
               selectedAnswer: q.selected_answer
                 ? q.selected_answer.toUpperCase().charCodeAt(0) - 65
                 : null,
-              correctAnswer: 0, // We don't have this in the response
+              correctAnswer: q.correct_option || null, // Get correct_option from API response
               isCorrect: q.status === 1,
               status: q.status, // Store status to check for not attempted
               timestamp: attemptDetails.start_time || item.created_at,
@@ -235,6 +257,8 @@ export default function PerformanceClient() {
             id: `${item.user_practice_exam_id}-${attemptDetails.practice_exam_attempt_details_id}`,
             examName: examName,
             examId: item.exam_overview_id,
+            grade: grade,
+            level: level,
             sectionId: item.section_id,
             sectionName: sectionName,
             syllabusId: item.syllabus_id,
@@ -268,61 +292,73 @@ export default function PerformanceClient() {
 
         setPerformanceData(finalData);
 
-        // Fetch stats separately without filters/search to get total attempts and total time
-        const statsUrl = `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
-          parsedUserData.user_id
-        }?page=1&page_size=1000`; // Large page size to get all records for stats
+        // Use statistics from API response if available
+        if (statistics) {
+          // Use statistics from the filtered API response
+          setTotalAttemptsFromStats(statistics.total_attempts);
+          setTotalTimeFromAllAttempts(statistics.total_time);
+          calculateStatsFromApi(statistics, finalData);
+        } else {
+          // Fallback: Fetch stats separately without filters/search to get total attempts and total time
+          const statsUrl = `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
+            parsedUserData.user_id
+          }?page=1&page_size=1000`; // Large page size to get all records for stats
 
-        const statsResponse = await fetch(statsUrl, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          mode: "cors",
-        });
+          const statsResponse = await fetch(statsUrl, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+          });
 
-        if (statsResponse.ok) {
-          const statsResponseText = await statsResponse.text();
-          try {
-            const statsApiResponse = statsResponseText
-              ? JSON.parse(statsResponseText)
-              : { data: [], pagination: null };
-            const statsPagination = statsApiResponse.pagination || null;
-            const statsData = statsApiResponse.data || [];
+          if (statsResponse.ok) {
+            const statsResponseText = await statsResponse.text();
+            try {
+              const statsApiResponse = statsResponseText
+                ? JSON.parse(statsResponseText)
+                : { data: [], pagination: null, statistics: null };
+              const statsPagination = statsApiResponse.pagination || null;
+              const statsData = statsApiResponse.data || [];
+              const statsStatistics = statsApiResponse.statistics || null;
 
-            // Calculate total time from all attempts (unfiltered)
-            let calculatedTotalTime = 0;
-            statsData.forEach((item: any) => {
-              const attemptDetails = item.practice_exam_attempt_details;
-              if (attemptDetails && attemptDetails.total_time) {
-                calculatedTotalTime += attemptDetails.total_time;
+              if (statsStatistics) {
+                // Use statistics from unfiltered API response
+                setTotalAttemptsFromStats(statsStatistics.total_attempts);
+                setTotalTimeFromAllAttempts(statsStatistics.total_time);
+                calculateStatsFromApi(statsStatistics, finalData);
+              } else {
+                // Fallback: Calculate from data
+                let calculatedTotalTime = 0;
+                statsData.forEach((item: any) => {
+                  const attemptDetails = item.practice_exam_attempt_details;
+                  if (attemptDetails && attemptDetails.total_time) {
+                    calculatedTotalTime += attemptDetails.total_time;
+                  }
+                });
+
+                setTotalTimeFromAllAttempts(calculatedTotalTime);
+
+                if (statsPagination) {
+                  setTotalAttemptsFromStats(statsPagination.total);
+                  calculateStats(
+                    finalData,
+                    statsPagination.total,
+                    calculatedTotalTime
+                  );
+                } else {
+                  calculateStats(finalData, null, calculatedTotalTime);
+                }
               }
-            });
-
-            // Store total time from all attempts
-            setTotalTimeFromAllAttempts(calculatedTotalTime);
-
-            if (statsPagination) {
-              // Store total attempts from stats API (unfiltered)
-              setTotalAttemptsFromStats(statsPagination.total);
-              // Calculate stats with the unfiltered total and total time
-              calculateStats(
-                finalData,
-                statsPagination.total,
-                calculatedTotalTime
-              );
-            } else {
-              // Fallback if no pagination info
-              calculateStats(finalData, null, calculatedTotalTime);
+            } catch (parseError) {
+              console.error("Failed to parse stats JSON:", parseError);
+              calculateStats(finalData, null, 0);
             }
-          } catch (parseError) {
-            console.error("Failed to parse stats JSON:", parseError);
+          } else {
+            // Fallback if stats API fails
             calculateStats(finalData, null, 0);
           }
-        } else {
-          // Fallback if stats API fails
-          calculateStats(finalData, null, 0);
         }
       } catch (error) {
         console.error("Error loading performance data:", error);
@@ -333,6 +369,33 @@ export default function PerformanceClient() {
 
     fetchPerformanceData();
   }, [router, currentPage, filterDifficulty, searchQuery]);
+
+  // Calculate stats from API statistics object
+  const calculateStatsFromApi = (
+    statistics: {
+      total_time: number;
+      best_score: number;
+      average_score: number;
+      total_attempts: number;
+    },
+    data?: PerformanceData[]
+  ) => {
+    // Calculate total questions answered from provided data or current performanceData
+    const dataToUse = data || performanceData;
+    const totalQuestionsAnswered = dataToUse.reduce(
+      (sum, d) => sum + d.totalQuestions,
+      0
+    );
+
+    setStats({
+      totalAttempts: statistics.total_attempts,
+      averageScore: Math.round(statistics.average_score * 100), // Convert decimal to percentage
+      totalQuestionsAnswered: totalQuestionsAnswered,
+      totalTimeSpent: statistics.total_time, // Already in seconds
+      bestScore: Math.round(statistics.best_score), // Already a percentage
+      weakestSubject: "N/A", // Not available in statistics
+    });
+  };
 
   const calculateStats = (
     data: PerformanceData[],
@@ -574,7 +637,7 @@ export default function PerformanceClient() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                        Exam/Topic
+                        Exam/Section/Syllabus
                       </th>
                       <th className="text-left py-3 px-4 font-semibold text-gray-700">
                         Difficulty
@@ -611,9 +674,17 @@ export default function PerformanceClient() {
                             <div>
                               <p className="font-medium text-gray-900">
                                 {item.examName}
+                                {item.grade !== null && item.level !== null && (
+                                  <span className="ml-2 text-sm font-normal text-gray-600">
+                                    (Grade {item.grade}, Level {item.level})
+                                  </span>
+                                )}
                               </p>
                               <p className="text-sm text-gray-600">
-                                {item.topicName}
+                                Section: {item.sectionName}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Syllabus: {item.topicName}
                               </p>
                             </div>
                           </td>
@@ -671,7 +742,11 @@ export default function PerformanceClient() {
                           </td>
                           <td className="py-3 px-4 text-gray-600">
                             <div>
-                              {new Date(item.date).toLocaleDateString()}
+                              {new Date(item.date).toLocaleDateString("en-GB", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              })}
                               <br />
                               <span className="text-xs text-gray-500">
                                 {new Date(item.date).toLocaleTimeString()}
@@ -790,10 +865,32 @@ export default function PerformanceClient() {
                         Attempt Details
                       </h2>
                       <p className="text-gray-600 mt-1">
-                        {selectedRecord.examName} - {selectedRecord.topicName}
+                        {selectedRecord.examName}
+                        {selectedRecord.grade !== null &&
+                          selectedRecord.level !== null && (
+                            <span className="ml-2 text-sm">
+                              (Grade {selectedRecord.grade}, Level{" "}
+                              {selectedRecord.level})
+                            </span>
+                          )}
+                      </p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Section: {selectedRecord.sectionName}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Syllabus: {selectedRecord.topicName}
                       </p>
                       <p className="text-sm text-gray-500 mt-1">
-                        Date: {new Date(selectedRecord.date).toLocaleString()}
+                        Date:{" "}
+                        {new Date(selectedRecord.date).toLocaleDateString(
+                          "en-GB",
+                          {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                          }
+                        )}{" "}
+                        {new Date(selectedRecord.date).toLocaleTimeString()}
                       </p>
                     </div>
                     <button
@@ -911,9 +1008,7 @@ export default function PerformanceClient() {
                                       Correct Answer
                                     </p>
                                     <p className="font-semibold text-green-600">
-                                      {String.fromCharCode(
-                                        65 + attempt.correctAnswer
-                                      )}
+                                      {attempt.correctAnswer || "N/A"}
                                     </p>
                                   </div>
                                 </div>

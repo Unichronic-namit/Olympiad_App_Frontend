@@ -1,8 +1,25 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getApiUrl, API_ENDPOINTS } from "../../config/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { ChevronDownIcon } from "lucide-react";
 
 export default function SignupPage() {
   type Exam = {
@@ -51,12 +68,11 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [apiError, setApiError] = useState("");
-  const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(false);
-  const examsDropdownRef = useRef<HTMLDivElement>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [filteredExams, setFilteredExams] = useState<Exam[]>([]);
   const [isLoadingExams, setIsLoadingExams] = useState(false);
   const [examsError, setExamsError] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Fetch exams from API
   useEffect(() => {
@@ -133,69 +149,33 @@ export default function SignupPage() {
     }
   }, [formData.grade, exams]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        examsDropdownRef.current &&
-        !examsDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsExamsDropdownOpen(false);
-      }
-    };
-
-    if (isExamsDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isExamsDropdownOpen]);
-
-  const toggleExam = (examOverviewId: number) => {
-    setFormData((prev) => {
-      const currentExams = prev.exams;
-      const isSelected = currentExams.includes(examOverviewId);
-
-      if (isSelected) {
-        return {
-          ...prev,
-          exams: currentExams.filter((exam) => exam !== examOverviewId),
-        };
-      } else {
-        return {
-          ...prev,
-          exams: [...currentExams, examOverviewId],
-        };
-      }
-    });
+  // Handle MultiSelect value change for exams
+  const handleExamsChange = (values: string[]) => {
+    const examIds = values.map((v) => parseInt(v, 10));
+    setFormData((prev) => ({ ...prev, exams: examIds }));
     setErrors((prev) => ({ ...prev, exams: undefined }));
     if (apiError) setApiError("");
   };
 
-  const getDisplayText = () => {
-    if (formData.exams.length === 0) {
-      return formData.grade ? "Select exams for your grade" : "Select exams";
-    }
-    if (formData.exams.length === 1) {
-      const exam = exams.find(
-        (exam) => exam.exam_overview_id === formData.exams[0]
-      );
-      if (exam) {
-        return `${exam.exam} - Level ${exam.level}`;
-      }
-      return "Selected exam";
-    }
-    return `${formData.exams.length} exams selected`;
-  };
+  // Convert filteredExams to MultiSelect options format
+  const examOptions = filteredExams.map((exam) => ({
+    label: exam.exam,
+    value: exam.exam_overview_id.toString(),
+    subLabel: `Level ${exam.level}`,
+  }));
 
-  const getExamLabel = (examOverviewId: number) => {
-    const exam = exams.find((exam) => exam.exam_overview_id === examOverviewId);
-    if (exam) {
-      return `${exam.exam} - Level ${exam.level}`;
+  // Format date as DD/MM/YYYY for display
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return "Select date";
+    try {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return "Select date";
     }
-    return `Exam ID: ${examOverviewId}`;
   };
 
   const validate = (): Errors => {
@@ -421,6 +401,14 @@ export default function SignupPage() {
     if (apiError) setApiError("");
   };
 
+  // Handle Select component changes (for grade and phoneCode)
+  const handleSelectChange = (name: keyof FormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: undefined }));
+    // Clear API error when user makes a selection
+    if (apiError) setApiError("");
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-2xl p-8 bg-white rounded-xl shadow-sm border border-gray-200">
@@ -442,15 +430,13 @@ export default function SignupPage() {
               >
                 First Name
               </label>
-              <input
+              <Input
                 type="text"
                 id="firstName"
                 name="firstName"
                 value={formData.firstName}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.firstName ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full ${errors.firstName ? "border-red-500" : ""}`}
                 placeholder="John"
                 aria-invalid={!!errors.firstName}
                 aria-describedby={
@@ -470,15 +456,13 @@ export default function SignupPage() {
               >
                 Last Name
               </label>
-              <input
+              <Input
                 type="text"
                 id="lastName"
                 name="lastName"
                 value={formData.lastName}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.lastName ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full ${errors.lastName ? "border-red-500" : ""}`}
                 placeholder="Doe"
                 aria-invalid={!!errors.lastName}
                 aria-describedby={
@@ -500,15 +484,13 @@ export default function SignupPage() {
             >
               Email Address
             </label>
-            <input
+            <Input
               type="email"
               id="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.email ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full ${errors.email ? "border-red-500" : ""}`}
               placeholder="your.email@example.com"
               aria-invalid={!!errors.email}
               aria-describedby={errors.email ? "email-error" : undefined}
@@ -528,15 +510,13 @@ export default function SignupPage() {
               >
                 Password
               </label>
-              <input
+              <Input
                 type="password"
                 id="password"
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.password ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full ${errors.password ? "border-red-500" : ""}`}
                 placeholder="••••••••"
                 aria-invalid={!!errors.password}
                 aria-describedby={
@@ -556,7 +536,7 @@ export default function SignupPage() {
               >
                 Confirm Password
               </label>
-              <input
+              <Input
                 type="password"
                 id="confirmPassword"
                 name="confirmPassword"
@@ -568,8 +548,8 @@ export default function SignupPage() {
                     confirmPassword: undefined,
                   }));
                 }}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.confirmPassword ? "border-red-500" : "border-gray-300"
+                className={`w-full ${
+                  errors.confirmPassword ? "border-red-500" : ""
                 }`}
                 placeholder="••••••••"
                 aria-invalid={!!errors.confirmPassword}
@@ -596,26 +576,28 @@ export default function SignupPage() {
               >
                 Grade
               </label>
-              <select
-                id="grade"
-                name="grade"
-                value={formData.grade}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.grade ? "border-red-500" : "border-gray-300"
-                }`}
-                aria-invalid={!!errors.grade}
-                aria-describedby={errors.grade ? "grade-error" : undefined}
+              <Select
+                value={formData.grade || ""}
+                onValueChange={(value) => handleSelectChange("grade", value)}
               >
-                <option value="" disabled>
-                  Select grade
-                </option>
-                {Array.from({ length: 12 }, (_, i) => `${i + 1}`).map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  id="grade"
+                  className={`w-full ${
+                    errors.grade ? "border-red-500" : "border-gray-300"
+                  }`}
+                  aria-invalid={!!errors.grade}
+                  aria-describedby={errors.grade ? "grade-error" : undefined}
+                >
+                  <SelectValue placeholder="Select grade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => `${i + 1}`).map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {errors.grade && (
                 <p id="grade-error" className="mt-1 text-sm text-red-600">
                   {errors.grade}
@@ -629,18 +611,48 @@ export default function SignupPage() {
               >
                 Date of Birth
               </label>
-              <input
-                type="date"
-                id="dob"
-                name="dob"
-                value={formData.dob}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.dob ? "border-red-500" : "border-gray-300"
-                }`}
-                aria-invalid={!!errors.dob}
-                aria-describedby={errors.dob ? "dob-error" : undefined}
-              />
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    id="dob"
+                    className={`w-full justify-between font-normal ${
+                      errors.dob ? "border-red-500" : ""
+                    }`}
+                    type="button"
+                    aria-invalid={!!errors.dob}
+                    aria-describedby={errors.dob ? "dob-error" : undefined}
+                  >
+                    {formData.dob ? formatDate(formData.dob) : "Select date"}
+                    <ChevronDownIcon className="ml-2 h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.dob ? new Date(formData.dob) : undefined}
+                    captionLayout="dropdown"
+                    onSelect={(date) => {
+                      if (date) {
+                        // Format date as YYYY-MM-DD for formData
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(
+                          2,
+                          "0"
+                        );
+                        const day = String(date.getDate()).padStart(2, "0");
+                        const dateString = `${year}-${month}-${day}`;
+                        setFormData((prev) => ({ ...prev, dob: dateString }));
+                        setErrors((prev) => ({ ...prev, dob: undefined }));
+                        setCalendarOpen(false);
+                      }
+                    }}
+                    disabled={(date) => date > new Date()}
+                    fromYear={1900}
+                    toYear={new Date().getFullYear()}
+                  />
+                </PopoverContent>
+              </Popover>
               {errors.dob && (
                 <p id="dob-error" className="mt-1 text-sm text-red-600">
                   {errors.dob}
@@ -656,135 +668,46 @@ export default function SignupPage() {
             >
               Exams
             </label>
-            <div className="relative" ref={examsDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsExamsDropdownOpen(!isExamsDropdownOpen)}
-                className={`w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white flex items-center justify-between ${
-                  errors.exams ? "border-red-500" : "border-gray-300"
-                } ${
-                  formData.exams.length > 0 ? "text-gray-900" : "text-gray-500"
-                }`}
-                aria-invalid={!!errors.exams}
-                aria-describedby={errors.exams ? "exams-error" : undefined}
-                aria-haspopup="listbox"
-                aria-expanded={isExamsDropdownOpen}
-              >
-                <span className="truncate">{getDisplayText()}</span>
-                <svg
-                  className={`w-5 h-5 text-gray-400 transition-transform ${
-                    isExamsDropdownOpen ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-
-              {isExamsDropdownOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-                  <div className="py-1">
-                    {isLoadingExams ? (
-                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                        Loading exams...
-                      </div>
-                    ) : examsError ? (
-                      <div className="px-4 py-3 text-sm text-red-600 text-center">
-                        {examsError}
-                      </div>
-                    ) : !formData.grade ? (
-                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                        Please select your grade first to see available exams
-                      </div>
-                    ) : filteredExams.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                        No exams available for selected grade
-                      </div>
-                    ) : (
-                      filteredExams.map((exam) => {
-                        const isSelected = formData.exams.includes(
-                          exam.exam_overview_id
-                        );
-                        return (
-                          <button
-                            key={exam.exam_overview_id}
-                            type="button"
-                            onClick={() => toggleExam(exam.exam_overview_id)}
-                            className={`w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none flex items-center ${
-                              isSelected ? "bg-blue-50" : ""
-                            }`}
-                          >
-                            <div className="flex items-center flex-1">
-                              <div
-                                className={`w-4 h-4 border-2 rounded mr-3 flex items-center justify-center ${
-                                  isSelected
-                                    ? "bg-blue-600 border-blue-600"
-                                    : "border-gray-300"
-                                }`}
-                              >
-                                {isSelected && (
-                                  <svg
-                                    className="w-3 h-3 text-white"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={3}
-                                      d="M5 13l4 4L19 7"
-                                    />
-                                  </svg>
-                                )}
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-sm text-gray-900 font-medium">
-                                  {exam.exam}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  Level {exam.level}
-                                </span>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            {errors.exams && (
-              <p id="exams-error" className="mt-1 text-sm text-red-600">
-                {errors.exams}
-              </p>
-            )}
-            {!formData.grade && !errors.exams && (
-              <p className="mt-1 text-xs text-gray-500">
-                Please select your grade first to see available exams
-              </p>
-            )}
-            {formData.exams.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {formData.exams.map((examOverviewId) => {
-                  return (
-                    <span
-                      key={examOverviewId}
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                    >
-                      {getExamLabel(examOverviewId)}
-                    </span>
-                  );
-                })}
+            {isLoadingExams ? (
+              <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-500 text-center">
+                Loading exams...
               </div>
+            ) : examsError ? (
+              <div className="w-full px-4 py-3 border border-red-500 rounded-lg bg-red-50 text-sm text-red-600">
+                {examsError}
+              </div>
+            ) : !formData.grade ? (
+              <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-500 text-center">
+                Please select your grade first to see available exams
+              </div>
+            ) : (
+              <>
+                <MultiSelect
+                  options={examOptions}
+                  value={formData.exams.map((id) => id.toString())}
+                  onValueChange={handleExamsChange}
+                  placeholder={
+                    formData.grade
+                      ? "Select exams for your grade"
+                      : "Select exams"
+                  }
+                  maxCount={5}
+                  className={
+                    errors.exams ? "border-red-500" : "border-gray-300"
+                  }
+                  disabled={!formData.grade || filteredExams.length === 0}
+                />
+                {errors.exams && (
+                  <p id="exams-error" className="mt-1 text-sm text-red-600">
+                    {errors.exams}
+                  </p>
+                )}
+                {!formData.grade && !errors.exams && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Please select your grade first to see available exams
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -796,27 +719,34 @@ export default function SignupPage() {
               >
                 Code
               </label>
-              <select
-                id="phoneCode"
-                name="phoneCode"
+              <Select
                 value={formData.phoneCode}
-                onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.phoneCode ? "border-red-500" : "border-gray-300"
-                }`}
-                aria-invalid={!!errors.phoneCode}
-                aria-describedby={
-                  errors.phoneCode ? "phoneCode-error" : undefined
+                onValueChange={(value) =>
+                  handleSelectChange("phoneCode", value)
                 }
               >
-                {["+91", "+1", "+44", "+61", "+81", "+49", "+971"].map(
-                  (code) => (
-                    <option key={code} value={code}>
-                      {code}
-                    </option>
-                  )
-                )}
-              </select>
+                <SelectTrigger
+                  id="phoneCode"
+                  className={`w-full ${
+                    errors.phoneCode ? "border-red-500" : "border-gray-300"
+                  }`}
+                  aria-invalid={!!errors.phoneCode}
+                  aria-describedby={
+                    errors.phoneCode ? "phoneCode-error" : undefined
+                  }
+                >
+                  <SelectValue placeholder="Select code" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["+91", "+1", "+44", "+61", "+81", "+49", "+971"].map(
+                    (code) => (
+                      <SelectItem key={code} value={code}>
+                        {code}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
               {errors.phoneCode && (
                 <p id="phoneCode-error" className="mt-1 text-sm text-red-600">
                   {errors.phoneCode}
@@ -830,15 +760,13 @@ export default function SignupPage() {
               >
                 Phone Number
               </label>
-              <input
+              <Input
                 type="tel"
                 id="phone"
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.phone ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full ${errors.phone ? "border-red-500" : ""}`}
                 placeholder="9876543210"
                 aria-invalid={!!errors.phone}
                 aria-describedby={errors.phone ? "phone-error" : undefined}
@@ -858,15 +786,13 @@ export default function SignupPage() {
             >
               School Name
             </label>
-            <input
+            <Input
               type="text"
               id="schoolName"
               name="schoolName"
               value={formData.schoolName}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                errors.schoolName ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full ${errors.schoolName ? "border-red-500" : ""}`}
               placeholder="Springfield Public School"
               aria-invalid={!!errors.schoolName}
               aria-describedby={
@@ -888,15 +814,13 @@ export default function SignupPage() {
               >
                 City
               </label>
-              <input
+              <Input
                 type="text"
                 id="city"
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.city ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full ${errors.city ? "border-red-500" : ""}`}
                 placeholder="Mumbai"
                 aria-invalid={!!errors.city}
                 aria-describedby={errors.city ? "city-error" : undefined}
@@ -914,15 +838,13 @@ export default function SignupPage() {
               >
                 State
               </label>
-              <input
+              <Input
                 type="text"
                 id="state"
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                  errors.state ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full ${errors.state ? "border-red-500" : ""}`}
                 placeholder="Maharashtra"
                 aria-invalid={!!errors.state}
                 aria-describedby={errors.state ? "state-error" : undefined}
