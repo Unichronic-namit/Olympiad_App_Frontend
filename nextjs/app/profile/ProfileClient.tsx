@@ -146,17 +146,17 @@ export default function ProfileClient() {
 
   const formik = useFormik<UserData>({
     initialValues: {
-    first_name: "",
-    last_name: "",
-    email: "",
+      first_name: "",
+      last_name: "",
+      email: "",
       grade_exams: [{ grade: 8, exams: [], isExisting: false }],
-    date_of_birth: "",
-    phone_number: "",
-    country_code: "+91",
-    school_name: "",
-    city: "",
-    state: "",
-    profile_image: "",
+      date_of_birth: "",
+      phone_number: "",
+      country_code: "+91",
+      school_name: "",
+      city: "",
+      state: "",
+      profile_image: "",
     },
     enableReinitialize: true,
     validate: (values) => {
@@ -473,8 +473,8 @@ export default function ProfileClient() {
               `User profile not found. Please check if user_id is correct: ${userId}`
             );
             // Fallback to localStorage data
-      const parsedData = JSON.parse(storedUserData);
-      setUserData(parsedData);
+            const parsedData = JSON.parse(storedUserData);
+            setUserData(parsedData);
             setIsLoading(false);
             return;
           }
@@ -543,11 +543,11 @@ export default function ProfileClient() {
           setUserData(parsedData);
         } catch (fallbackError) {
           console.error("Error parsing fallback data:", fallbackError);
-      router.push("/login");
+          router.push("/login");
         }
-    } finally {
-      setIsLoading(false);
-    }
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchUserInfo();
@@ -696,7 +696,7 @@ export default function ProfileClient() {
         setErrorMessage(
           error.message || "Failed to load exams. Please try again later."
         );
-    } finally {
+      } finally {
         setIsLoadingExams(false);
       }
     };
@@ -854,7 +854,7 @@ export default function ProfileClient() {
 
             {/* Profile Form */}
             <FormikProvider value={formik}>
-            <div className="space-y-6">
+              <div className="space-y-6">
                 {/* Profile Image Section */}
                 <div className="flex flex-col items-center mb-6">
                   <div className="relative">
@@ -969,21 +969,21 @@ export default function ProfileClient() {
                   </div>
                 </div>
 
-              {/* Personal Information */}
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Personal Information
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name
-                    </label>
-                    {isEditing ? (
+                {/* Personal Information */}
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    Personal Information
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        First Name
+                      </label>
+                      {isEditing ? (
                         <div>
                           <Input
-                        type="text"
-                        name="first_name"
+                            type="text"
+                            name="first_name"
                             value={formik.values.first_name}
                             onChange={formik.handleChange}
                             onBlur={formik.handleBlur}
@@ -1001,22 +1001,22 @@ export default function ProfileClient() {
                               </p>
                             )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.first_name}
-                      </p>
-                    )}
-                  </div>
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.first_name}
+                        </p>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name
-                    </label>
-                    {isEditing ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Last Name
+                      </label>
+                      {isEditing ? (
                         <div>
                           <Input
-                        type="text"
-                        name="last_name"
+                            type="text"
+                            name="last_name"
                             value={formik.values.last_name}
                             onChange={formik.handleChange}
                             onBlur={formik.handleBlur}
@@ -1034,23 +1034,23 @@ export default function ProfileClient() {
                               </p>
                             )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.last_name}
-                      </p>
-                    )}
-                  </div>
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.last_name}
+                        </p>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
-                    {isEditing ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      {isEditing ? (
                         <div>
                           <Input
                             disabled
-                        type="email"
-                        name="email"
+                            type="email"
+                            name="email"
                             value={formik.values.email}
                             onChange={formik.handleChange}
                             onBlur={formik.handleBlur}
@@ -1066,21 +1066,21 @@ export default function ProfileClient() {
                             </p>
                           )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.email}
-                      </p>
-                    )}
-                  </div>
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.email}
+                        </p>
+                      )}
+                    </div>
 
-                  <div>
+                    <div>
                       <Label
                         htmlFor="date_of_birth"
                         className="block text-sm font-medium text-gray-700 mb-1"
                       >
                         Date of Birth
                       </Label>
-                    {isEditing ? (
+                      {isEditing ? (
                         <div>
                           <Popover
                             open={calendarOpen}
@@ -1157,22 +1157,22 @@ export default function ProfileClient() {
                               </p>
                             )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
                           {formatDate(userData.date_of_birth)}
-                      </p>
-                    )}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  </div>
+                </div>
 
-                  <div>
+                <div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">
                     Grade & Exam Selection
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="col-span-2">
-                    {isEditing ? (
+                      {isEditing ? (
                         <FieldArray name="grade_exams">
                           {({ push, remove }) => {
                             return (
@@ -1363,8 +1363,8 @@ export default function ProfileClient() {
                                                     ? "border-red-500"
                                                     : ""
                                                 }
-                      />
-                    ) : (
+                                              />
+                                            ) : (
                                               // Multi-select component for new grades
                                               <MultiSelect
                                                 options={filteredExams.map(
@@ -1669,7 +1669,7 @@ export default function ProfileClient() {
                                     <Label className="text-sm font-medium text-gray-700 mb-1 block">
                                       Grade
                                     </Label>
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                                    <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
                                       Grade {grade}
                                     </p>
                                   </div>
@@ -1692,32 +1692,32 @@ export default function ProfileClient() {
                             </p>
                           )}
                         </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Contact Information */}
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Contact Information
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone Number
-                    </label>
-                    {isEditing ? (
+                {/* Contact Information */}
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    Contact Information
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone Number
+                      </label>
+                      {isEditing ? (
                         <div>
-                      <div className="flex gap-2">
+                          <div className="flex gap-2">
                             <div className="w-24">
                               <Input
-                          type="text"
-                          name="country_code"
+                                type="text"
+                                name="country_code"
                                 value={formik.values.country_code}
                                 onChange={formik.handleChange}
                                 onBlur={formik.handleBlur}
-                          placeholder="+91"
+                                placeholder="+91"
                                 className={
                                   formik.touched.country_code &&
                                   formik.errors.country_code
@@ -1734,8 +1734,8 @@ export default function ProfileClient() {
                             </div>
                             <div className="flex-1">
                               <Input
-                          type="tel"
-                          name="phone_number"
+                                type="tel"
+                                name="phone_number"
                                 value={formik.values.phone_number}
                                 onChange={formik.handleChange}
                                 onBlur={formik.handleBlur}
@@ -1754,31 +1754,31 @@ export default function ProfileClient() {
                                 )}
                             </div>
                           </div>
-                      </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.country_code} {userData.phone_number}
-                      </p>
-                    )}
+                        </div>
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.country_code} {userData.phone_number}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* School Information */}
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  School Information
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      School Name
-                    </label>
-                    {isEditing ? (
+                {/* School Information */}
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    School Information
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        School Name
+                      </label>
+                      {isEditing ? (
                         <div>
                           <Input
-                        type="text"
-                        name="school_name"
+                            type="text"
+                            name="school_name"
                             value={formik.values.school_name}
                             onChange={formik.handleChange}
                             onBlur={formik.handleBlur}
@@ -1796,22 +1796,22 @@ export default function ProfileClient() {
                               </p>
                             )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.school_name}
-                      </p>
-                    )}
-                  </div>
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.school_name}
+                        </p>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      City
-                    </label>
-                    {isEditing ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        City
+                      </label>
+                      {isEditing ? (
                         <div>
                           <Input
-                        type="text"
-                        name="city"
+                            type="text"
+                            name="city"
                             value={formik.values.city}
                             onChange={formik.handleChange}
                             onBlur={formik.handleBlur}
@@ -1827,22 +1827,22 @@ export default function ProfileClient() {
                             </p>
                           )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.city}
-                      </p>
-                    )}
-                  </div>
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.city}
+                        </p>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State
-                    </label>
-                    {isEditing ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        State
+                      </label>
+                      {isEditing ? (
                         <div>
                           <Input
-                        type="text"
-                        name="state"
+                            type="text"
+                            name="state"
                             value={formik.values.state}
                             onChange={formik.handleChange}
                             onBlur={formik.handleBlur}
@@ -1858,37 +1858,37 @@ export default function ProfileClient() {
                             </p>
                           )}
                         </div>
-                    ) : (
-                      <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
-                        {userData.state}
-                      </p>
-                    )}
+                      ) : (
+                        <p className="px-4 py-2 bg-gray-50 rounded-lg text-gray-900">
+                          {userData.state}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Action Buttons */}
-              {isEditing && (
+                {/* Action Buttons */}
+                {isEditing && (
                   <form onSubmit={formik.handleSubmit}>
-                <div className="flex gap-4 pt-4">
-                  <button
+                    <div className="flex gap-4 pt-4">
+                      <button
                         type="submit"
                         disabled={formik.isSubmitting}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
-                  >
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50"
+                      >
                         {formik.isSubmitting ? "Saving..." : "Save Changes"}
-                  </button>
-                  <button
+                      </button>
+                      <button
                         type="button"
                         onClick={handleCancel}
-                    className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                        className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </form>
-              )}
-            </div>
+                )}
+              </div>
             </FormikProvider>
           </div>
         </div>
