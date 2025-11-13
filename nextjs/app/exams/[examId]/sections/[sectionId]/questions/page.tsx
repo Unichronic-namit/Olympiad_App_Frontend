@@ -1376,10 +1376,10 @@ function QuestionsPageContent() {
                         {questions.length}
                       </span>
                       <span className="text-sm text-gray-600">
-                        {Math.round(
+                        {/* {Math.round(
                           ((currentQuestionIndex + 1) / questions.length) * 100
                         )}
-                        %
+                        % */}
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">

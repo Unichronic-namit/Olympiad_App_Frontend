@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getApiUrl, API_ENDPOINTS } from "../../config/api";
+import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -119,14 +120,14 @@ export default function LoginPage() {
             >
               Email Address
             </label>
-            <input
+            <Input
               type="email"
               id="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              className="w-full"
               placeholder="your.email@example.com"
             />
           </div>
@@ -138,14 +139,14 @@ export default function LoginPage() {
             >
               Password
             </label>
-            <input
+            <Input
               type="password"
               id="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              className="w-full"
               placeholder="••••••••"
             />
           </div>

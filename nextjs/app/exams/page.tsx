@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/dashboard/Navbar";
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Exam = {
   exam_overview_id: number;
@@ -157,8 +164,7 @@ export default function ExamsPage() {
   }, [userData]);
 
   // Handle grade selection from dropdown
-  const handleGradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
+  const handleGradeChange = (value: string) => {
     const grade = value === "all" ? null : value ? parseInt(value, 10) : null;
     setSelectedGrade(grade);
     filterExams(exams, grade);
@@ -211,8 +217,7 @@ export default function ExamsPage() {
                 >
                   Filter by Grade:
                 </label>
-                <select
-                  id="grade-filter"
+                <Select
                   value={
                     selectedGrade !== null
                       ? selectedGrade.toString()
@@ -220,16 +225,20 @@ export default function ExamsPage() {
                       ? userData.grade.toString()
                       : "all"
                   }
-                  onChange={handleGradeChange}
-                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer min-w-[120px]"
+                  onValueChange={handleGradeChange}
                 >
-                  <option value="all">All Grades</option>
-                  {availableGrades.map((grade) => (
-                    <option key={grade} value={grade.toString()}>
-                      Grade {grade}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="grade-filter" className="min-w-[140px]">
+                    <SelectValue placeholder="Select grade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Grades</SelectItem>
+                    {availableGrades.map((grade) => (
+                      <SelectItem key={grade} value={grade.toString()}>
+                        Grade {grade}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
