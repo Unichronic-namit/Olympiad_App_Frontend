@@ -220,8 +220,8 @@ export const MultiSelect = React.forwardRef<
             )}
           >
             {selectedValues.length > 0 ? (
-              <div className="flex justify-between items-center w-full">
-                <div className="flex flex-wrap items-center">
+              <div className="flex justify-between items-center w-full gap-2">
+                <div className="flex flex-wrap items-center gap-1 flex-1 min-w-0">
                   {selectedValues.slice(0, maxCount).map((value) => {
                     const option = options.find((o) => o.value === value);
                     const IconComponent = option?.icon;
@@ -233,21 +233,24 @@ export const MultiSelect = React.forwardRef<
                           isAnimating ? "" : "",
                           multiSelectVariants({ variant: "default" }),
                           isRegistered
-                            ? "bg-blue-100 text-blue-800 font-medium text-xs gap-2"
-                            : "bg-[#F2F4F7] text-[#344054] font-medium text-xs gap-2"
+                            ? "bg-blue-100 text-blue-800 font-medium text-xs gap-1"
+                            : "bg-[#F2F4F7] text-[#344054] font-medium text-xs gap-1",
+                          "shrink-0"
                         )}
                         style={{ animationDuration: `${animation}s` }}
                       >
                         {IconComponent && (
-                          <IconComponent className="h-4 w-4 mr-2" />
+                          <IconComponent className="h-3 w-3 sm:h-4 sm:w-4" />
                         )}
-                        {option?.label}
+                        <span className="truncate max-w-[120px] sm:max-w-none">
+                          {option?.label}
+                        </span>
                         <Image
                           src="/close.svg"
                           alt=""
                           width={16}
                           height={16}
-                          className="h-4 w-4 cursor-pointer"
+                          className="h-3 w-3 sm:h-4 sm:w-4 cursor-pointer shrink-0"
                           onClick={(event) => {
                             event.stopPropagation();
                             toggleOption(value);
@@ -257,12 +260,12 @@ export const MultiSelect = React.forwardRef<
                     );
                   })}
                   {selectedValues.length > maxCount && (
-                    <p className="text-xs font-medium">{` ${
+                    <p className="text-xs font-medium whitespace-nowrap">{` ${
                       selectedValues.length - maxCount
                     } more`}</p>
                   )}
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between shrink-0">
                   <ChevronDown className="h-4 mx-2 cursor-pointer text-muted-foreground" />
                 </div>
               </div>
@@ -281,7 +284,7 @@ export const MultiSelect = React.forwardRef<
           align="start"
           onEscapeKeyDown={() => setIsPopoverOpen(false)}
         >
-          <div className="w-[438px]">
+          <div className="w-full max-w-[438px] sm:w-[438px]">
             <Command>
               <CommandInput
                 placeholder="Search"
@@ -297,7 +300,7 @@ export const MultiSelect = React.forwardRef<
                         onSelect={toggleAll}
                         className="cursor-pointer p-2"
                       >
-                        <p className="text-[#475467] font-medium flex-grow">
+                        <p className="text-[#475467] font-medium grow">
                           {allTitle}
                         </p>
                         {selectedValues.length === options.length && (
@@ -324,7 +327,7 @@ export const MultiSelect = React.forwardRef<
                                 : ""
                             }`}
                           >
-                            <div className="flex items-center gap-2 flex-grow">
+                            <div className="flex items-center gap-2 grow">
                               {option.icon && (
                                 <option.icon className="pr-2 h-4 w-4 text-muted-foreground" />
                               )}

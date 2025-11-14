@@ -575,8 +575,8 @@ export default function PerformanceClient() {
           )}
 
           {/* Search and Filters */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Search
@@ -588,7 +588,7 @@ export default function PerformanceClient() {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setSearchQuery(e.target.value)
                   }
-                  className="w-full"
+                  className="w-full text-sm sm:text-base"
                 />
               </div>
               <div>
@@ -599,7 +599,7 @@ export default function PerformanceClient() {
                   value={filterDifficulty}
                   onValueChange={setFilterDifficulty}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full text-sm sm:text-base">
                     <SelectValue placeholder="All Difficulties" />
                   </SelectTrigger>
                   <SelectContent>
@@ -770,8 +770,8 @@ export default function PerformanceClient() {
 
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
+                <div className="px-3 sm:px-6 py-3 sm:py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
+                  <div className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">
                     Showing {startIndex + 1} to{" "}
                     {Math.min(
                       endIndex,
@@ -779,7 +779,7 @@ export default function PerformanceClient() {
                     )}{" "}
                     of {paginationInfo?.total || filteredData.length} results
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-center">
                     <button
                       onClick={() =>
                         setCurrentPage((prev) => Math.max(1, prev - 1))
@@ -787,7 +787,7 @@ export default function PerformanceClient() {
                       disabled={
                         !paginationInfo?.has_previous && currentPage === 1
                       }
-                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
                         !paginationInfo?.has_previous && currentPage === 1
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-blue-600 text-white hover:bg-blue-700"
@@ -796,7 +796,7 @@ export default function PerformanceClient() {
                       Previous
                     </button>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto max-w-full sm:max-w-none">
                       {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                         (page) => {
                           // Show first page, last page, current page, and pages around current
@@ -809,7 +809,7 @@ export default function PerformanceClient() {
                               <button
                                 key={page}
                                 onClick={() => setCurrentPage(page)}
-                                className={`px-3 py-2 rounded-lg font-medium transition ${
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition shrink-0 ${
                                   currentPage === page
                                     ? "bg-blue-600 text-white"
                                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -823,7 +823,10 @@ export default function PerformanceClient() {
                             page === currentPage + 2
                           ) {
                             return (
-                              <span key={page} className="px-2 text-gray-500">
+                              <span
+                                key={page}
+                                className="px-1 sm:px-2 text-gray-500 text-xs sm:text-sm shrink-0"
+                              >
                                 ...
                               </span>
                             );
@@ -840,7 +843,7 @@ export default function PerformanceClient() {
                       disabled={
                         !paginationInfo?.has_next && currentPage === totalPages
                       }
-                      className={`px-4 py-2 rounded-lg font-medium transition ${
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
                         !paginationInfo?.has_next && currentPage === totalPages
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-blue-600 text-white hover:bg-blue-700"
