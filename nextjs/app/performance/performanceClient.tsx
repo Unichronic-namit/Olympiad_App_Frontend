@@ -583,7 +583,7 @@ export default function PerformanceClient() {
                 </label>
                 <Input
                   type="text"
-                  placeholder="Search by exam, topic, or section..."
+                  placeholder="Search by exam, section, topic or subtopic..."
                   value={searchQuery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setSearchQuery(e.target.value)
@@ -967,11 +967,6 @@ export default function PerformanceClient() {
                                       }`}
                                     >
                                       Question {index + 1}
-                                    </span>
-                                    <span className="text-sm text-gray-600">
-                                      {new Date(
-                                        attempt.timestamp
-                                      ).toLocaleTimeString()}
                                     </span>
                                   </div>
                                   <span

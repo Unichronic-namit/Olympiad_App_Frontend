@@ -35,6 +35,8 @@ function QuestionsPageContent() {
   const sectionId = params.sectionId as string;
   const syllabusId = searchParams.get("syllabus_id");
   const difficultyParam = searchParams.get("difficulty");
+  const examType = searchParams.get("examType"); // "section" for section exam flow
+  const isSectionExam = examType === "section";
   const [practiceExamAttemptDetailsId, setPracticeExamAttemptDetailsId] =
     useState<string | null>(null);
 
@@ -224,23 +226,36 @@ function QuestionsPageContent() {
   useEffect(() => {
     // Fetch questions from API
     const fetchQuestions = async () => {
-      if (!userData || !syllabusId) return;
+      // For section exam flow, we need sectionId; for syllabus flow, we need syllabusId
+      if (
+        !userData ||
+        (!isSectionExam && !syllabusId) ||
+        (isSectionExam && !sectionId)
+      )
+        return;
 
       setIsLoading(true);
       setError("");
 
       try {
-        const response = await fetch(
-          `${getApiUrl(API_ENDPOINTS.QUESTIONS)}/${syllabusId}/questions`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            mode: "cors",
-          }
-        );
+        // Use different API endpoint based on exam type
+        const apiUrl = isSectionExam
+          ? `${getApiUrl(
+              API_ENDPOINTS.SECTION_QUESTIONS
+            )}/${sectionId}/questions`
+          : `${getApiUrl(API_ENDPOINTS.QUESTIONS)}/${syllabusId}/questions`;
+
+        console.log("Fetching questions from:", apiUrl);
+        console.log("Exam type:", isSectionExam ? "section" : "syllabus");
+
+        const response = await fetch(apiUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+        });
 
         const responseText = await response.text();
         console.log("Questions API Response:", responseText);
@@ -267,8 +282,8 @@ function QuestionsPageContent() {
         // Filter only active questions
         let activeQuestions = questionsData.filter((q) => q.is_active);
 
-        // Filter by difficulty if provided
-        if (difficultyParam) {
+        // Filter by difficulty if provided (only for syllabus exam flow)
+        if (difficultyParam && !isSectionExam) {
           activeQuestions = activeQuestions.filter(
             (q) => q.difficulty?.toLowerCase() === difficultyParam.toLowerCase()
           );
@@ -285,10 +300,13 @@ function QuestionsPageContent() {
       }
     };
 
-    if (userData && syllabusId) {
+    if (
+      userData &&
+      ((!isSectionExam && syllabusId) || (isSectionExam && sectionId))
+    ) {
       fetchQuestions();
     }
-  }, [userData, syllabusId, difficultyParam]);
+  }, [userData, syllabusId, sectionId, difficultyParam, isSectionExam]);
 
   // Timer count-up effect
   useEffect(() => {

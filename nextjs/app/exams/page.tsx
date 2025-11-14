@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../components/dashboard/Navbar";
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
 import {
@@ -24,6 +24,7 @@ type Exam = {
 
 export default function ExamsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userData, setUserData] = useState<any>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [filteredExams, setFilteredExams] = useState<Exam[]>([]);
@@ -310,7 +311,11 @@ export default function ExamsPage() {
                   {/* View Section Button */}
                   <button
                     onClick={() => {
-                      router.push(`/exams/${exam.exam_overview_id}/sections`);
+                      const examType = searchParams.get("type");
+                      const url = examType
+                        ? `/exams/${exam.exam_overview_id}/sections?type=${examType}`
+                        : `/exams/${exam.exam_overview_id}/sections`;
+                      router.push(url);
                     }}
                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition duration-200"
                   >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Navbar from "../../../components/dashboard/Navbar";
 import { getApiUrl, API_ENDPOINTS } from "../../../config/api";
 
@@ -17,12 +17,24 @@ type Section = {
 export default function SectionsPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const examId = params.examId as string;
   const [userData, setUserData] = useState<any>(null);
+  const examType = searchParams.get("type");
   const [sections, setSections] = useState<Section[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [examInfo, setExamInfo] = useState<any>(null);
+
+  // Handle Start Practice for Section Exam flow
+  // For section exam flow, just navigate to questions page (no POST API call)
+  // Questions will be fetched from /section/{section_id}/questions API
+  const handleStartPractice = (sectionId: number) => {
+    // Navigate directly to questions page with section exam flag
+    router.push(
+      `/exams/${examId}/sections/${sectionId}/questions?examType=section`
+    );
+  };
 
   useEffect(() => {
     // Check if user is authenticated
@@ -169,10 +181,13 @@ export default function SectionsPage() {
                 <div
                   key={section.section_id}
                   className="bg-white rounded-xl shadow-sm border-2 border-gray-200 hover:border-blue-300 hover:shadow-lg transition cursor-pointer"
-                  onClick={() => {
-                    router.push(
-                      `/exams/${examId}/sections/${section.section_id}/topics`
-                    );
+                  onClick={(e) => {
+                    // Only handle card click if it's not a section exam (section exam is handled by button)
+                    if (examType !== "section") {
+                      router.push(
+                        `/exams/${examId}/sections/${section.section_id}/topics`
+                      );
+                    }
                   }}
                 >
                   <div className="p-6">
@@ -215,8 +230,24 @@ export default function SectionsPage() {
                     </div>
 
                     {/* Action Button */}
-                    <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-lg shadow-sm transition duration-200 flex items-center justify-center gap-2">
-                      <span>Start Learning</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (examType === "section") {
+                          handleStartPractice(section.section_id);
+                        } else {
+                          router.push(
+                            `/exams/${examId}/sections/${section.section_id}/topics`
+                          );
+                        }
+                      }}
+                      className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-lg shadow-sm transition duration-200 flex items-center justify-center gap-2"
+                    >
+                      <span>
+                        {examType === "section"
+                          ? "Start Practice"
+                          : "Start Learning"}
+                      </span>
                       <span>→</span>
                     </button>
                   </div>

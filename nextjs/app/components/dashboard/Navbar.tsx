@@ -3,6 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
@@ -15,6 +20,7 @@ const navItems = [
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(false);
   const pathname = usePathname();
 
   const handleLogout = () => {
@@ -37,20 +43,86 @@ export default function Navbar() {
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition ${
-                  pathname === item.href
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                }`}
-              >
-                <span className="mr-3 text-xl">{item.icon}</span>
-                {item.name}
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              // Special handling for Exams dropdown
+              if (item.name === "Exams") {
+                return (
+                  <Collapsible
+                    key={item.name}
+                    open={isExamsDropdownOpen}
+                    onOpenChange={setIsExamsDropdownOpen}
+                    className="relative"
+                  >
+                    <CollapsibleTrigger
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
+                        pathname === item.href || pathname?.startsWith("/exams")
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <span className="mr-3 text-xl">{item.icon}</span>
+                        {item.name}
+                      </div>
+                      <svg
+                        className={`w-4 h-4 transition-transform ${
+                          isExamsDropdownOpen ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="absolute left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                      <div className="py-1">
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-not-allowed"
+                          disabled
+                        >
+                          Full exam
+                        </button>
+                        <Link
+                          href="/exams?type=section"
+                          onClick={() => setIsExamsDropdownOpen(false)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          Section exam
+                        </Link>
+                        <Link
+                          href="/exams"
+                          onClick={() => setIsExamsDropdownOpen(false)}
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          Syllabus exam
+                        </Link>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              }
+              // Regular nav items
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition ${
+                    pathname === item.href
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                  }`}
+                >
+                  <span className="mr-3 text-xl">{item.icon}</span>
+                  {item.name}
+                </Link>
+              );
+            })}
           </div>
         </nav>
 
@@ -149,21 +221,92 @@ export default function Navbar() {
               {/* Navigation Items */}
               <nav className="flex-1 overflow-y-auto p-4">
                 <div className="space-y-2">
-                  {navItems.map((item) => (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition ${
-                        pathname === item.href
-                          ? "bg-blue-600 text-white"
-                          : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                      }`}
-                    >
-                      <span className="mr-3 text-xl">{item.icon}</span>
-                      {item.name}
-                    </Link>
-                  ))}
+                  {navItems.map((item) => {
+                    // Special handling for Exams dropdown in mobile
+                    if (item.name === "Exams") {
+                      return (
+                        <Collapsible
+                          key={item.name}
+                          open={isExamsDropdownOpen}
+                          onOpenChange={setIsExamsDropdownOpen}
+                          className="space-y-1"
+                        >
+                          <CollapsibleTrigger
+                            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
+                              pathname === item.href ||
+                              pathname?.startsWith("/exams")
+                                ? "bg-blue-600 text-white"
+                                : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                            }`}
+                          >
+                            <div className="flex items-center">
+                              <span className="mr-3 text-xl">{item.icon}</span>
+                              {item.name}
+                            </div>
+                            <svg
+                              className={`w-4 h-4 transition-transform ${
+                                isExamsDropdownOpen ? "rotate-180" : ""
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="pl-4 space-y-1">
+                            <button
+                              className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-not-allowed rounded-lg"
+                              disabled
+                            >
+                              Full exam
+                            </button>
+                            <Link
+                              href="/exams?type=section"
+                              onClick={() => {
+                                setIsExamsDropdownOpen(false);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                            >
+                              Section exam
+                            </Link>
+                            <Link
+                              href="/exams"
+                              onClick={() => {
+                                setIsExamsDropdownOpen(false);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                            >
+                              Syllabus exam
+                            </Link>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    }
+                    // Regular nav items
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition ${
+                          pathname === item.href
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        }`}
+                      >
+                        <span className="mr-3 text-xl">{item.icon}</span>
+                        {item.name}
+                      </Link>
+                    );
+                  })}
                 </div>
               </nav>
 
