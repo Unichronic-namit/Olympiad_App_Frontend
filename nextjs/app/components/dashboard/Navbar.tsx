@@ -11,14 +11,22 @@ import {
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
-  { name: "Exams", href: "/exams", icon: "📝" },
+  { name: "Practice Exams", href: "/exams", icon: "📝" },
   { name: "Notes", href: "/notes", icon: "📚" },
   { name: "Practice", href: "/practice", icon: "✏️" },
   { name: "Performance", href: "/performance", icon: "📈" },
   { name: "Profile", href: "/profile", icon: "👤" },
 ];
 
-export default function Navbar() {
+interface NavbarProps {
+  isQuestionsPage?: boolean;
+  onMobileMenuClick?: () => void;
+}
+
+export default function Navbar({
+  isQuestionsPage = false,
+  onMobileMenuClick,
+}: NavbarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(false);
   const pathname = usePathname();
@@ -45,7 +53,7 @@ export default function Navbar() {
           <div className="space-y-2">
             {navItems.map((item) => {
               // Special handling for Exams dropdown
-              if (item.name === "Exams") {
+              if (item.name === "Practice Exams") {
                 return (
                   <Collapsible
                     key={item.name}
@@ -86,21 +94,21 @@ export default function Navbar() {
                           className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-not-allowed"
                           disabled
                         >
-                          Full exam
+                          Practice Full Exam
                         </button>
                         <Link
                           href="/exams?type=section"
                           onClick={() => setIsExamsDropdownOpen(false)}
                           className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                         >
-                          Section exam
+                          Practice Section Exam
                         </Link>
                         <Link
                           href="/exams"
                           onClick={() => setIsExamsDropdownOpen(false)}
                           className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                         >
-                          Syllabus exam
+                          Practice Syllabus Exam
                         </Link>
                       </div>
                     </CollapsibleContent>
@@ -151,9 +159,17 @@ export default function Navbar() {
               </Link>
             ) : (
               <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                onClick={() => {
+                  if (isQuestionsPage && onMobileMenuClick) {
+                    onMobileMenuClick();
+                  } else {
+                    setIsMobileMenuOpen(!isMobileMenuOpen);
+                  }
+                }}
                 className="p-2 rounded-lg text-gray-700 hover:bg-gray-100"
-                aria-label="Toggle menu"
+                aria-label={
+                  isQuestionsPage ? "Toggle questions list" : "Toggle menu"
+                }
               >
                 <svg
                   className="w-6 h-6"
@@ -223,7 +239,7 @@ export default function Navbar() {
                 <div className="space-y-2">
                   {navItems.map((item) => {
                     // Special handling for Exams dropdown in mobile
-                    if (item.name === "Exams") {
+                    if (item.name === "Practice Exams") {
                       return (
                         <Collapsible
                           key={item.name}
@@ -264,7 +280,7 @@ export default function Navbar() {
                               className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-not-allowed rounded-lg"
                               disabled
                             >
-                              Full exam
+                              Practice Full Exam
                             </button>
                             <Link
                               href="/exams?type=section"
@@ -274,7 +290,7 @@ export default function Navbar() {
                               }}
                               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
                             >
-                              Section exam
+                              Practice Section Exam
                             </Link>
                             <Link
                               href="/exams"
@@ -284,7 +300,7 @@ export default function Navbar() {
                               }}
                               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
                             >
-                              Syllabus exam
+                              Practice Syllabus Exam
                             </Link>
                           </CollapsibleContent>
                         </Collapsible>

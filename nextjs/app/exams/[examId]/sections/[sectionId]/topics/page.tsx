@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Navbar from "../../../../../components/dashboard/Navbar";
 import { getApiUrl, API_ENDPOINTS } from "../../../../../config/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type SyllabusItem = {
   syllabus_id: number;
@@ -385,34 +392,42 @@ export default function TopicsPage() {
                     className="bg-white rounded-xl shadow-sm border-2 border-gray-200 p-6"
                   >
                     {/* Topic Header */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4">
                       <div className="flex items-center">
-                        <div className="text-3xl mr-3">📖</div>
-                        <h2 className="text-2xl font-bold text-gray-900">
+                        <div className="text-2xl sm:text-3xl mr-2 sm:mr-3">
+                          📖
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                           {group.topic}
                         </h2>
                       </div>
 
                       {/* Difficulty Dropdown - Top Right Corner */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
                         <label
                           htmlFor={`difficulty-${groupIndex}`}
                           className="text-sm font-medium text-gray-700 whitespace-nowrap"
                         >
                           Difficulty:
                         </label>
-                        <select
-                          id={`difficulty-${groupIndex}`}
+                        <Select
                           value={currentDifficulty}
-                          onChange={(e) =>
-                            handleDifficultyChange(group.topic, e.target.value)
+                          onValueChange={(value) =>
+                            handleDifficultyChange(group.topic, value)
                           }
-                          className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
                         >
-                          <option value="Easy">🟢 Easy</option>
-                          <option value="Medium">🟡 Medium</option>
-                          <option value="Hard">🔴 Hard</option>
-                        </select>
+                          <SelectTrigger
+                            id={`difficulty-${groupIndex}`}
+                            className="w-full sm:w-[140px] text-sm sm:text-base"
+                          >
+                            <SelectValue placeholder="Select difficulty" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Easy">🟢 Easy</SelectItem>
+                            <SelectItem value="Medium">🟡 Medium</SelectItem>
+                            <SelectItem value="Hard">🔴 Hard</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
 
