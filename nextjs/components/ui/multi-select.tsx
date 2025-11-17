@@ -245,17 +245,19 @@ export const MultiSelect = React.forwardRef<
                         <span className="truncate max-w-[120px] sm:max-w-none">
                           {option?.label}
                         </span>
-                        <Image
-                          src="/close.svg"
-                          alt=""
-                          width={16}
-                          height={16}
-                          className="h-3 w-3 sm:h-4 sm:w-4 cursor-pointer shrink-0"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleOption(value);
-                          }}
-                        />
+                        {!isRegistered && (
+                          <Image
+                            src="/close.svg"
+                            alt=""
+                            width={16}
+                            height={16}
+                            className="h-3 w-3 sm:h-4 sm:w-4 cursor-pointer shrink-0"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleOption(value);
+                            }}
+                          />
+                        )}
                       </Badge>
                     );
                   })}

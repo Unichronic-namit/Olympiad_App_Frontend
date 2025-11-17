@@ -159,7 +159,7 @@ export default function SignupPage() {
 
   // Convert filteredExams to MultiSelect options format
   const examOptions = filteredExams.map((exam) => ({
-    label: exam.exam,
+    label: `${exam.exam} - Level ${exam.level}`,
     value: exam.exam_overview_id.toString(),
     subLabel: `Level ${exam.level}`,
   }));
@@ -691,7 +691,7 @@ export default function SignupPage() {
                       ? "Select exams for your grade"
                       : "Select exams"
                   }
-                  maxCount={5}
+                  maxCount={filteredExams.length || 100}
                   className={
                     errors.exams ? "border-red-500" : "border-gray-300"
                   }

@@ -12,12 +12,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDownIcon } from "lucide-react";
 
 type QuestionAttempt = {
   questionId: number;
+  question_no: number; // Question number from que_ans_details
+  question_text: string; // Question text from questions_data
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: string; // Correct option from questions_data (A, B, C, D)
+  selected_answer: string | null; // Selected answer from que_ans_details
   attemptNumber: number;
-  selectedAnswer: number | null;
-  correctAnswer: string | null; // Store as string (A, B, C, D) from API
+  selectedAnswer: number | null; // Keep for backward compatibility
+  correctAnswer: string | null; // Keep for backward compatibility
   isCorrect: boolean;
   status?: number; // 0 = not attempted, 1 = correct, 2 = incorrect
   timestamp: string;
@@ -102,6 +116,7 @@ export default function PerformanceClient() {
   const [totalTimeFromAllAttempts, setTotalTimeFromAllAttempts] = useState<
     number | null
   >(null);
+  const [openQuestions, setOpenQuestions] = useState<Set<string>>(new Set());
   const [apiStatistics, setApiStatistics] = useState<{
     total_time: number;
     best_score: number;
@@ -231,24 +246,44 @@ export default function PerformanceClient() {
           const incorrectAnswers = queAnsDetails.filter(
             (q: any) => q.status === 2
           ).length;
-          // Get total questions from questions.question_ids array length
-          const totalQuestions =
-            item.questions?.question_ids?.length || queAnsDetails.length || 0;
 
-          // Transform question attempts
-          const questionAttempts: QuestionAttempt[] = queAnsDetails.map(
-            (q: any, index: number) => ({
-              questionId: q.question_id,
-              attemptNumber: 1,
-              selectedAnswer: q.selected_answer
-                ? q.selected_answer.toUpperCase().charCodeAt(0) - 65
-                : null,
-              correctAnswer: q.correct_option || null, // Get correct_option from API response
-              isCorrect: q.status === 1,
-              status: q.status, // Store status to check for not attempted
-              timestamp: attemptDetails.start_time || item.created_at,
-              timeSpent: 0, // We don't have this in the response
-            })
+          // Get questions_data from API response
+          const questionsData = item.questions?.questions_data || [];
+
+          // Get total questions from questions_data length
+          const totalQuestions =
+            questionsData.length || queAnsDetails.length || 0;
+
+          // Transform question attempts - use questions_data as source, match with que_ans_details
+          const questionAttempts: QuestionAttempt[] = questionsData.map(
+            (question: any) => {
+              // Find matching entry in que_ans_details by question_id
+              const queAnsDetail = queAnsDetails.find(
+                (q: any) => q.question_id === question.question_id
+              );
+
+              return {
+                questionId: question.question_id,
+                question_no: queAnsDetail?.question_no || 0,
+                question_text: question.question_text || "",
+                option_a: question.option_a || "",
+                option_b: question.option_b || "",
+                option_c: question.option_c || "",
+                option_d: question.option_d || "",
+                correct_option: question.correct_option || "", // From questions_data
+                selected_answer: queAnsDetail?.selected_answer || null, // From que_ans_details
+                attemptNumber: 1,
+                selectedAnswer: queAnsDetail?.selected_answer
+                  ? queAnsDetail.selected_answer.toUpperCase().charCodeAt(0) -
+                    65
+                  : null,
+                correctAnswer: question.correct_option || null, // From questions_data
+                isCorrect: queAnsDetail?.status === 1,
+                status: queAnsDetail?.status ?? 0, // Store status to check for not attempted
+                timestamp: attemptDetails.start_time || item.created_at,
+                timeSpent: 0, // We don't have this in the response
+              };
+            }
           );
 
           const sortDate = attemptDetails.start_time || item.created_at;
@@ -389,7 +424,7 @@ export default function PerformanceClient() {
 
     setStats({
       totalAttempts: statistics.total_attempts,
-      averageScore: Math.round(statistics.average_score * 100), // Convert decimal to percentage
+      averageScore: Math.round(statistics.average_score),
       totalQuestionsAnswered: totalQuestionsAnswered,
       totalTimeSpent: statistics.total_time, // Already in seconds
       bestScore: Math.round(statistics.best_score), // Already a percentage
@@ -947,10 +982,25 @@ export default function PerformanceClient() {
                           (attempt, index) => {
                             const isNotAttempted = attempt.status === 0;
                             const isCorrect = attempt.isCorrect;
+                            const questionKey = `${attempt.questionId}-${attempt.attemptNumber}`;
+                            const isOpen = openQuestions.has(questionKey);
+
                             return (
-                              <div
-                                key={`${attempt.questionId}-${attempt.attemptNumber}`}
-                                className={`p-4 rounded-lg border-2 ${
+                              <Collapsible
+                                key={questionKey}
+                                open={isOpen}
+                                onOpenChange={(open) => {
+                                  setOpenQuestions((prev) => {
+                                    const newSet = new Set(prev);
+                                    if (open) {
+                                      newSet.add(questionKey);
+                                    } else {
+                                      newSet.delete(questionKey);
+                                    }
+                                    return newSet;
+                                  });
+                                }}
+                                className={`rounded-lg border-2 ${
                                   isNotAttempted
                                     ? "bg-gray-50 border-gray-300"
                                     : isCorrect
@@ -958,8 +1008,8 @@ export default function PerformanceClient() {
                                     : "bg-red-50 border-red-200"
                                 }`}
                               >
-                                <div className="flex items-start justify-between mb-2">
-                                  <div className="flex items-center gap-3">
+                                <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-opacity-80 transition">
+                                  <div className="flex items-center gap-3 flex-1">
                                     <span
                                       className={`px-3 py-1 rounded-full text-sm font-semibold ${
                                         isNotAttempted
@@ -969,48 +1019,131 @@ export default function PerformanceClient() {
                                           : "bg-red-600 text-white"
                                       }`}
                                     >
-                                      Question {index + 1}
+                                      Question{" "}
+                                      {attempt.question_no || index + 1}
+                                    </span>
+                                    <span
+                                      className={`px-2 py-1 rounded text-xs font-medium ${
+                                        isNotAttempted
+                                          ? "bg-gray-200 text-gray-800"
+                                          : isCorrect
+                                          ? "bg-green-200 text-green-800"
+                                          : "bg-red-200 text-red-800"
+                                      }`}
+                                    >
+                                      {isNotAttempted
+                                        ? "Not Attempted"
+                                        : isCorrect
+                                        ? "✓ Correct"
+                                        : "✗ Incorrect"}
                                     </span>
                                   </div>
-                                  <span
-                                    className={`px-2 py-1 rounded text-xs font-medium ${
-                                      isNotAttempted
-                                        ? "bg-gray-200 text-gray-800"
-                                        : isCorrect
-                                        ? "bg-green-200 text-green-800"
-                                        : "bg-red-200 text-red-800"
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <p className="text-gray-900 font-medium text-base text-left">
+                                      {attempt.question_text ||
+                                        "Question text not available"}
+                                    </p>
+                                  </div>
+                                  <ChevronDownIcon
+                                    className={`h-5 w-5 text-gray-500 transition-transform ${
+                                      isOpen ? "transform rotate-180" : ""
                                     }`}
-                                  >
-                                    {isNotAttempted
-                                      ? "Not Attempted"
-                                      : isCorrect
-                                      ? "✓ Correct"
-                                      : "✗ Incorrect"}
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mt-3 text-sm">
-                                  <div>
-                                    <p className="text-gray-600 mb-1">
-                                      Selected Answer
-                                    </p>
-                                    <p className="font-semibold text-gray-900">
-                                      {attempt.selectedAnswer !== null
-                                        ? String.fromCharCode(
-                                            65 + attempt.selectedAnswer
-                                          )
-                                        : "Not answered"}
-                                    </p>
+                                  />
+                                </CollapsibleTrigger>
+
+                                <CollapsibleContent className="overflow-hidden">
+                                  <div className="px-4 pb-4 space-y-4">
+                                    {/* Options */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      <div
+                                        className={`p-2 rounded ${
+                                          attempt.correct_option === "A"
+                                            ? "bg-green-50 border border-green-200"
+                                            : attempt.selected_answer === "A"
+                                            ? "bg-red-50 border border-red-200"
+                                            : ""
+                                        }`}
+                                      >
+                                        <span className="font-semibold text-gray-700">
+                                          A.{" "}
+                                        </span>
+                                        <span className="text-gray-700">
+                                          {attempt.option_a}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={`p-2 rounded ${
+                                          attempt.correct_option === "B"
+                                            ? "bg-green-50 border border-green-200"
+                                            : attempt.selected_answer === "B"
+                                            ? "bg-red-50 border border-red-200"
+                                            : ""
+                                        }`}
+                                      >
+                                        <span className="font-semibold text-gray-700">
+                                          B.{" "}
+                                        </span>
+                                        <span className="text-gray-700">
+                                          {attempt.option_b}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={`p-2 rounded ${
+                                          attempt.correct_option === "C"
+                                            ? "bg-green-50 border border-green-200"
+                                            : attempt.selected_answer === "C"
+                                            ? "bg-red-50 border border-red-200"
+                                            : ""
+                                        }`}
+                                      >
+                                        <span className="font-semibold text-gray-700">
+                                          C.{" "}
+                                        </span>
+                                        <span className="text-gray-700">
+                                          {attempt.option_c}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={`p-2 rounded ${
+                                          attempt.correct_option === "D"
+                                            ? "bg-green-50 border border-green-200"
+                                            : attempt.selected_answer === "D"
+                                            ? "bg-red-50 border border-red-200"
+                                            : ""
+                                        }`}
+                                      >
+                                        <span className="font-semibold text-gray-700">
+                                          D.{" "}
+                                        </span>
+                                        <span className="text-gray-700">
+                                          {attempt.option_d}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Selected and Correct Answers */}
+                                    <div className="grid grid-cols-2 md:grid-cols-2 gap-4 text-sm border-t pt-3">
+                                      <div>
+                                        <p className="text-gray-600 mb-1">
+                                          Selected Answer
+                                        </p>
+                                        <p className="font-semibold text-gray-900">
+                                          {attempt.selected_answer ||
+                                            "Not answered"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-gray-600 mb-1">
+                                          Correct Answer
+                                        </p>
+                                        <p className="font-semibold text-green-600">
+                                          {attempt.correct_option || "N/A"}
+                                        </p>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-gray-600 mb-1">
-                                      Correct Answer
-                                    </p>
-                                    <p className="font-semibold text-green-600">
-                                      {attempt.correctAnswer || "N/A"}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
+                                </CollapsibleContent>
+                              </Collapsible>
                             );
                           }
                         )}
