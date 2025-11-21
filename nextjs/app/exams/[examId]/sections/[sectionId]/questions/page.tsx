@@ -471,6 +471,7 @@ function QuestionsPageContent() {
 
         const requestPayload = {
           question_id: currentQuestion.question_id,
+          question_no: currentQuestionIndex + 1, // Question number from sidebar (1-indexed)
           status: status,
           selected_answer: selectedAnswerLetter,
         };
@@ -617,6 +618,12 @@ function QuestionsPageContent() {
             } catch (parseError) {
               console.error("Failed to parse finish response:", parseError);
             }
+
+            // Remove practice_exam_attempt_details_id from localStorage after exam completion
+            localStorage.removeItem("practice_exam_attempt_details_id");
+            console.log(
+              "Removed practice_exam_attempt_details_id from localStorage after exam completion"
+            );
           } else {
             console.error(
               "Failed to finish exam:",
@@ -673,6 +680,7 @@ function QuestionsPageContent() {
 
         const requestPayload = {
           question_id: currentQuestion.question_id,
+          question_no: currentQuestionIndex + 1, // Question number from sidebar (1-indexed)
           status: status,
           selected_answer: selectedAnswerLetter,
         };
@@ -790,6 +798,12 @@ function QuestionsPageContent() {
           } catch (parseError) {
             console.error("Failed to parse finish response:", parseError);
           }
+
+          // Remove practice_exam_attempt_details_id from localStorage after exam completion
+          localStorage.removeItem("practice_exam_attempt_details_id");
+          console.log(
+            "Removed practice_exam_attempt_details_id from localStorage after exam completion"
+          );
         } else {
           console.error(
             "Failed to finish exam:",
@@ -969,6 +983,7 @@ function QuestionsPageContent() {
       try {
         const requestPayload = {
           question_id: clickedQuestion.question_id,
+          question_no: index + 1, // Question number from sidebar (1-indexed)
           status: 0,
           selected_answer: null,
         };
@@ -1033,6 +1048,7 @@ function QuestionsPageContent() {
         try {
           const requestPayload = {
             question_id: firstQuestion.question_id,
+            question_no: 1, // First question is always question number 1
             status: 0,
             selected_answer: null,
           };
@@ -1489,8 +1505,8 @@ function QuestionsPageContent() {
                       </span>
                       <span className="text-sm text-gray-600">
                         {/* {Math.round(
-                          ((currentQuestionIndex + 1) / questions.length) * 100
-                        )}
+                    ((currentQuestionIndex + 1) / questions.length) * 100
+                  )}
                         % */}
                       </span>
                     </div>
