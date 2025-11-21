@@ -27,13 +27,105 @@ export default function SectionsPage() {
   const [examInfo, setExamInfo] = useState<any>(null);
 
   // Handle Start Practice for Section Exam flow
-  // For section exam flow, just navigate to questions page (no POST API call)
-  // Questions will be fetched from /section/{section_id}/questions API
-  const handleStartPractice = (sectionId: number) => {
-    // Navigate directly to questions page with section exam flag
-    router.push(
-      `/exams/${examId}/sections/${sectionId}/questions?examType=section`
-    );
+  const handleStartPractice = async (sectionId: number) => {
+    try {
+      // Get user_id from userData
+      if (!userData || !userData.user_id) {
+        console.error("User ID not found");
+        setError("User ID not found. Please login again.");
+        return;
+      }
+
+      // Prepare request payload - syllabus_id as 0 and difficulty as null/empty
+      const requestPayload = {
+        user_id: parseInt(userData.user_id),
+        exam_overview_id: parseInt(examId),
+        section_id: sectionId,
+        syllabus_id: 0,
+        difficulty: "",
+      };
+
+      console.log("Starting practice with payload:", requestPayload);
+      console.log("API URL:", getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM));
+
+      // Call POST API
+      const response = await fetch(
+        getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+          body: JSON.stringify(requestPayload),
+        }
+      );
+
+      const responseText = await response.text();
+      console.log("User Practice Exam POST Response Status:", response.status);
+      console.log("User Practice Exam POST Response:", responseText);
+
+      let practiceExamAttemptDetailsId: number | null = null;
+
+      if (!response.ok) {
+        let errorMessage = responseText;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage =
+            errorData.detail ||
+            errorData.message ||
+            errorData.error ||
+            responseText;
+        } catch {
+          // Use text as is if parsing fails
+          errorMessage = responseText || `HTTP ${response.status}`;
+        }
+        console.error("Failed to start practice:", errorMessage);
+        setError(errorMessage);
+      } else {
+        console.log("Practice session started successfully");
+        // Parse response to get practice_exam_attempt_details_id
+        try {
+          const responseData = responseText ? JSON.parse(responseText) : {};
+          // Try different possible response formats
+          practiceExamAttemptDetailsId =
+            responseData.practice_exam_attempt_details_id ||
+            responseData.id ||
+            responseData.attempt_id ||
+            (Array.isArray(responseData) && responseData.length > 0
+              ? responseData[0].practice_exam_attempt_details_id ||
+                responseData[0].id
+              : null);
+          console.log(
+            "Practice Exam Attempt Details ID:",
+            practiceExamAttemptDetailsId
+          );
+
+          // Store practice_exam_attempt_details_id in localStorage
+          if (practiceExamAttemptDetailsId) {
+            localStorage.setItem(
+              "practice_exam_attempt_details_id",
+              practiceExamAttemptDetailsId.toString()
+            );
+            console.log(
+              "Stored practice_exam_attempt_details_id in localStorage:",
+              practiceExamAttemptDetailsId
+            );
+          }
+        } catch (parseError) {
+          console.error("Failed to parse response:", parseError);
+        }
+
+        // Navigate to questions page with section exam flag
+        router.push(
+          `/exams/${examId}/sections/${sectionId}/questions?examType=section`
+        );
+      }
+    } catch (error: any) {
+      console.error("Error starting practice:", error);
+      setError(error.message || "Failed to start practice. Please try again.");
+    }
   };
 
   useEffect(() => {
