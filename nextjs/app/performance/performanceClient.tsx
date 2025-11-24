@@ -1031,6 +1031,7 @@ export default function PerformanceClient() {
                       <div className="space-y-3">
                         {selectedRecord.questionAttempts.map(
                           (attempt, index) => {
+                            const isNotVisited = attempt.status === 3;
                             const isNotAttempted = attempt.status === 0;
                             const isCorrect = attempt.isCorrect;
                             const questionKey = `${attempt.questionId}-${attempt.attemptNumber}`;
@@ -1052,8 +1053,10 @@ export default function PerformanceClient() {
                                   });
                                 }}
                                 className={`rounded-lg border-2 ${
-                                  isNotAttempted
+                                  isNotVisited
                                     ? "bg-gray-50 border-gray-300"
+                                    : isNotAttempted
+                                    ? "bg-purple-50 border-purple-300"
                                     : isCorrect
                                     ? "bg-green-50 border-green-200"
                                     : "bg-red-50 border-red-200"
@@ -1064,8 +1067,10 @@ export default function PerformanceClient() {
                                     <div className="flex items-center gap-3">
                                       <span
                                         className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                          isNotAttempted
+                                          isNotVisited
                                             ? "bg-gray-500 text-white"
+                                            : isNotAttempted
+                                            ? "bg-purple-500 text-white"
                                             : isCorrect
                                             ? "bg-green-600 text-white"
                                             : "bg-red-600 text-white"
@@ -1076,14 +1081,18 @@ export default function PerformanceClient() {
                                       </span>
                                       <span
                                         className={`px-2 py-1 rounded text-xs font-medium ${
-                                          isNotAttempted
+                                          isNotVisited
                                             ? "bg-gray-200 text-gray-800"
+                                            : isNotAttempted
+                                            ? "bg-purple-200 text-purple-800"
                                             : isCorrect
                                             ? "bg-green-200 text-green-800"
                                             : "bg-red-200 text-red-800"
                                         }`}
                                       >
-                                        {isNotAttempted
+                                        {isNotVisited
+                                          ? "Not Visited"
+                                          : isNotAttempted
                                           ? "Not Attempted"
                                           : isCorrect
                                           ? "✓ Correct"
