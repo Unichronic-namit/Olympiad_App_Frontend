@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../components/dashboard/Navbar";
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ type QuestionAttempt = {
   option_d: string;
   correct_option: string; // Correct option from questions_data (A, B, C, D)
   selected_answer: string | null; // Selected answer from que_ans_details
+  solution: string; // Solution from questions_data
   attemptNumber: number;
   selectedAnswer: number | null; // Keep for backward compatibility
   correctAnswer: string | null; // Keep for backward compatibility
@@ -89,6 +90,9 @@ const formatTime = (totalSeconds: number): string => {
 
 export default function PerformanceClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const examType = searchParams.get("type"); // "section" or "syllabus"
+  const isSectionExam = examType === "section";
   const [userData, setUserData] = useState<any>(null);
   const [performanceData, setPerformanceData] = useState<PerformanceData[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -156,13 +160,17 @@ export default function PerformanceClient() {
           queryParams.append("search", searchQuery.trim());
         }
 
-        // Add difficulty filter if not "all"
-        if (filterDifficulty !== "all") {
+        // Add difficulty filter if not "all" and not section exam flow
+        if (filterDifficulty !== "all" && !isSectionExam) {
           queryParams.append("difficulty", filterDifficulty);
         }
 
         // Fetch performance data from API with pagination, search, and filters
-        const apiUrl = `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
+        // Use different API endpoint based on exam type (section or syllabus)
+        const apiEndpoint = isSectionExam
+          ? API_ENDPOINTS.USER_PRACTICE_SECTION_EXAM
+          : API_ENDPOINTS.USER_PRACTICE_EXAM;
+        const apiUrl = `${getApiUrl(apiEndpoint)}/${
           parsedUserData.user_id
         }?${queryParams.toString()}`;
 
@@ -272,6 +280,7 @@ export default function PerformanceClient() {
                 option_d: question.option_d || "",
                 correct_option: question.correct_option || "", // From questions_data
                 selected_answer: queAnsDetail?.selected_answer || null, // From que_ans_details
+                solution: question.solution || "", // From questions_data
                 attemptNumber: 1,
                 selectedAnswer: queAnsDetail?.selected_answer
                   ? queAnsDetail.selected_answer.toUpperCase().charCodeAt(0) -
@@ -335,7 +344,11 @@ export default function PerformanceClient() {
           calculateStatsFromApi(statistics, finalData);
         } else {
           // Fallback: Fetch stats separately without filters/search to get total attempts and total time
-          const statsUrl = `${getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM)}/${
+          // Use different API endpoint for stats based on exam type
+          const statsEndpoint = isSectionExam
+            ? API_ENDPOINTS.USER_PRACTICE_SECTION_EXAM
+            : API_ENDPOINTS.USER_PRACTICE_EXAM;
+          const statsUrl = `${getApiUrl(statsEndpoint)}/${
             parsedUserData.user_id
           }?page=1&page_size=1000`; // Large page size to get all records for stats
 
@@ -403,7 +416,14 @@ export default function PerformanceClient() {
     };
 
     fetchPerformanceData();
-  }, [router, currentPage, filterDifficulty, searchQuery]);
+  }, [
+    router,
+    currentPage,
+    filterDifficulty,
+    searchQuery,
+    examType,
+    isSectionExam,
+  ]);
 
   // Calculate stats from API statistics object
   const calculateStatsFromApi = (
@@ -508,6 +528,10 @@ export default function PerformanceClient() {
   };
 
   const filteredData = performanceData.filter((item) => {
+    // Skip difficulty filtering for section exam flow
+    if (isSectionExam) {
+      return true;
+    }
     const matchesDifficulty =
       filterDifficulty === "all" ||
       item.difficulty.toLowerCase() === filterDifficulty.toLowerCase();
@@ -618,7 +642,11 @@ export default function PerformanceClient() {
                 </label>
                 <Input
                   type="text"
-                  placeholder="Search by exam, section, topic or subtopic..."
+                  placeholder={
+                    isSectionExam
+                      ? "Search by exam or section..."
+                      : "Search by exam, section, topic or subtopic..."
+                  }
                   value={searchQuery}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setSearchQuery(e.target.value)
@@ -626,25 +654,27 @@ export default function PerformanceClient() {
                   className="w-full text-sm sm:text-base"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Filter by Difficulty
-                </label>
-                <Select
-                  value={filterDifficulty}
-                  onValueChange={setFilterDifficulty}
-                >
-                  <SelectTrigger className="w-full text-sm sm:text-base">
-                    <SelectValue placeholder="All Difficulties" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Difficulties</SelectItem>
-                    <SelectItem value="easy">Easy</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="hard">Hard</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!isSectionExam && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Filter by Difficulty
+                  </label>
+                  <Select
+                    value={filterDifficulty}
+                    onValueChange={setFilterDifficulty}
+                  >
+                    <SelectTrigger className="w-full text-sm sm:text-base">
+                      <SelectValue placeholder="All Difficulties" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Difficulties</SelectItem>
+                      <SelectItem value="easy">Easy</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="hard">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
 
@@ -672,11 +702,15 @@ export default function PerformanceClient() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                        Exam/Section/Syllabus
+                        {isSectionExam
+                          ? "Exam/Section"
+                          : "Exam/Section/Syllabus"}
                       </th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                        Difficulty
-                      </th>
+                      {!isSectionExam && (
+                        <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                          Difficulty
+                        </th>
+                      )}
                       <th className="text-left py-3 px-4 font-semibold text-gray-700">
                         Score
                       </th>
@@ -718,25 +752,29 @@ export default function PerformanceClient() {
                               <p className="text-sm text-gray-600">
                                 Section: {item.sectionName}
                               </p>
-                              <p className="text-sm text-gray-600">
-                                Syllabus: {item.topicName}
-                              </p>
+                              {!isSectionExam && (
+                                <p className="text-sm text-gray-600">
+                                  Syllabus: {item.topicName}
+                                </p>
+                              )}
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${
-                                item.difficulty.toLowerCase() === "easy"
-                                  ? "bg-green-100 text-green-700"
-                                  : item.difficulty.toLowerCase() === "medium"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-red-100 text-red-700"
-                              }`}
-                            >
-                              {item.difficulty.charAt(0).toUpperCase() +
-                                item.difficulty.slice(1).toLowerCase()}
-                            </span>
-                          </td>
+                          {!isSectionExam && (
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-medium ${
+                                  item.difficulty.toLowerCase() === "easy"
+                                    ? "bg-green-100 text-green-700"
+                                    : item.difficulty.toLowerCase() === "medium"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {item.difficulty.charAt(0).toUpperCase() +
+                                  item.difficulty.slice(1).toLowerCase()}
+                              </span>
+                            </td>
+                          )}
                           <td className="py-3 px-4">
                             <div>
                               <span className="font-semibold text-gray-900">
@@ -915,9 +953,24 @@ export default function PerformanceClient() {
                       <p className="text-sm text-gray-600 mt-1">
                         Section: {selectedRecord.sectionName}
                       </p>
-                      <p className="text-sm text-gray-600">
-                        Syllabus: {selectedRecord.topicName}
-                      </p>
+                      {!isSectionExam && (
+                        <p className="text-sm text-gray-600 flex items-center gap-2">
+                          Syllabus: {selectedRecord.topicName}
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${
+                              selectedRecord.difficulty.toLowerCase() === "easy"
+                                ? "bg-green-100 text-green-700"
+                                : selectedRecord.difficulty.toLowerCase() ===
+                                  "medium"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {selectedRecord.difficulty.charAt(0).toUpperCase() +
+                              selectedRecord.difficulty.slice(1).toLowerCase()}
+                          </span>
+                        </p>
+                      )}
                       <p className="text-sm text-gray-500 mt-1">
                         Date:{" "}
                         {new Date(selectedRecord.date).toLocaleDateString(
@@ -943,11 +996,9 @@ export default function PerformanceClient() {
                   {/* Summary Stats */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">
-                        Total Questions
-                      </p>
+                      <p className="text-sm text-gray-600 mb-1">Score</p>
                       <p className="text-2xl font-bold text-blue-600">
-                        {selectedRecord.totalQuestions}
+                        {selectedRecord.score}/{selectedRecord.totalQuestions}
                       </p>
                     </div>
                     <div className="bg-green-50 rounded-lg p-4">
@@ -1008,47 +1059,49 @@ export default function PerformanceClient() {
                                     : "bg-red-50 border-red-200"
                                 }`}
                               >
-                                <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-opacity-80 transition">
-                                  <div className="flex items-center gap-3 flex-1">
-                                    <span
-                                      className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                        isNotAttempted
-                                          ? "bg-gray-500 text-white"
+                                <CollapsibleTrigger className="w-full p-4 flex flex-col gap-2 hover:bg-opacity-80 transition">
+                                  <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-3">
+                                      <span
+                                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                          isNotAttempted
+                                            ? "bg-gray-500 text-white"
+                                            : isCorrect
+                                            ? "bg-green-600 text-white"
+                                            : "bg-red-600 text-white"
+                                        }`}
+                                      >
+                                        Question{" "}
+                                        {attempt.question_no || index + 1}
+                                      </span>
+                                      <span
+                                        className={`px-2 py-1 rounded text-xs font-medium ${
+                                          isNotAttempted
+                                            ? "bg-gray-200 text-gray-800"
+                                            : isCorrect
+                                            ? "bg-green-200 text-green-800"
+                                            : "bg-red-200 text-red-800"
+                                        }`}
+                                      >
+                                        {isNotAttempted
+                                          ? "Not Attempted"
                                           : isCorrect
-                                          ? "bg-green-600 text-white"
-                                          : "bg-red-600 text-white"
+                                          ? "✓ Correct"
+                                          : "✗ Incorrect"}
+                                      </span>
+                                    </div>
+                                    <ChevronDownIcon
+                                      className={`h-5 w-5 text-gray-500 transition-transform ${
+                                        isOpen ? "transform rotate-180" : ""
                                       }`}
-                                    >
-                                      Question{" "}
-                                      {attempt.question_no || index + 1}
-                                    </span>
-                                    <span
-                                      className={`px-2 py-1 rounded text-xs font-medium ${
-                                        isNotAttempted
-                                          ? "bg-gray-200 text-gray-800"
-                                          : isCorrect
-                                          ? "bg-green-200 text-green-800"
-                                          : "bg-red-200 text-red-800"
-                                      }`}
-                                    >
-                                      {isNotAttempted
-                                        ? "Not Attempted"
-                                        : isCorrect
-                                        ? "✓ Correct"
-                                        : "✗ Incorrect"}
-                                    </span>
+                                    />
                                   </div>
-                                  <div className="flex items-center gap-2 flex-1">
+                                  <div className="w-full">
                                     <p className="text-gray-900 font-medium text-base text-left">
                                       {attempt.question_text ||
                                         "Question text not available"}
                                     </p>
                                   </div>
-                                  <ChevronDownIcon
-                                    className={`h-5 w-5 text-gray-500 transition-transform ${
-                                      isOpen ? "transform rotate-180" : ""
-                                    }`}
-                                  />
                                 </CollapsibleTrigger>
 
                                 <CollapsibleContent className="overflow-hidden">
@@ -1141,6 +1194,18 @@ export default function PerformanceClient() {
                                         </p>
                                       </div>
                                     </div>
+
+                                    {/* Solution */}
+                                    {attempt.solution && (
+                                      <div className="border-t pt-3">
+                                        <p className="text-gray-600 mb-2 font-semibold">
+                                          Solution:
+                                        </p>
+                                        <p className="text-gray-700 text-sm leading-relaxed">
+                                          {attempt.solution}
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
                                 </CollapsibleContent>
                               </Collapsible>

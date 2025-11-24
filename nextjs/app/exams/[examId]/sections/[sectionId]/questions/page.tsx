@@ -69,8 +69,16 @@ function QuestionsPageContent() {
   ); // Track which questions have status 0 (not answered)
   const [showScore, setShowScore] = useState(false);
   const [startTime] = useState(Date.now());
-  const [elapsedTime, setElapsedTime] = useState<number>(0); // Timer counting up from zero
+  const [elapsedTime, setElapsedTime] = useState<number>(0); // Timer counting up from zero (for syllabus exam)
+  const [timeRemaining, setTimeRemaining] = useState<number>(0); // Timer counting down to zero (for section exam)
   const [isTimerActive, setIsTimerActive] = useState(true);
+  // Section exam metadata
+  const [sectionExamInfo, setSectionExamInfo] = useState<{
+    time_for_section: number;
+    marks_per_question_section: number;
+    total_marks_section: number;
+    no_of_questions_section: number;
+  } | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile sidebar state
   const firstQuestionInitialized = useRef(false); // Track if first question PUT call has been made
   const [retryData, setRetryData] = useState<{
@@ -275,22 +283,47 @@ function QuestionsPageContent() {
           throw new Error("Invalid response from server");
         }
 
-        // Handle both array and object responses
-        const questionsData: Question[] = Array.isArray(data)
-          ? data
-          : data.questions || data.data || [];
+        // Handle section exam flow - extract metadata and questions
+        if (isSectionExam) {
+          // Section exam response structure: { questions: [], time_for_section, marks_per_question_section, total_marks_section, no_of_questions_section }
+          const questionsData: Question[] = data.questions || [];
 
-        // Filter only active questions
-        let activeQuestions = questionsData.filter((q) => q.is_active);
+          // Extract section exam metadata
+          if (data.time_for_section !== undefined) {
+            setSectionExamInfo({
+              time_for_section: data.time_for_section,
+              marks_per_question_section: data.marks_per_question_section || 0,
+              total_marks_section: data.total_marks_section || 0,
+              no_of_questions_section: data.no_of_questions_section || 0,
+            });
 
-        // Filter by difficulty if provided (only for syllabus exam flow)
-        if (difficultyParam && !isSectionExam) {
-          activeQuestions = activeQuestions.filter(
-            (q) => q.difficulty?.toLowerCase() === difficultyParam.toLowerCase()
-          );
+            // Initialize countdown timer (convert minutes to seconds)
+            const timeInSeconds = Math.floor(data.time_for_section * 60);
+            setTimeRemaining(timeInSeconds);
+          }
+
+          // Filter only active questions
+          const activeQuestions = questionsData.filter((q) => q.is_active);
+          setQuestions(activeQuestions);
+        } else {
+          // Syllabus exam flow - handle both array and object responses
+          const questionsData: Question[] = Array.isArray(data)
+            ? data
+            : data.questions || data.data || [];
+
+          // Filter only active questions
+          let activeQuestions = questionsData.filter((q) => q.is_active);
+
+          // Filter by difficulty if provided
+          if (difficultyParam) {
+            activeQuestions = activeQuestions.filter(
+              (q) =>
+                q.difficulty?.toLowerCase() === difficultyParam.toLowerCase()
+            );
+          }
+
+          setQuestions(activeQuestions);
         }
-
-        setQuestions(activeQuestions);
       } catch (error: any) {
         console.error("Error fetching questions:", error);
         setError(
@@ -309,18 +342,30 @@ function QuestionsPageContent() {
     }
   }, [userData, syllabusId, sectionId, difficultyParam, isSectionExam]);
 
-  // Timer count-up effect
+  // Timer effect - count-up for syllabus exam, countdown for section exam
   useEffect(() => {
     if (!isTimerActive || showScore) {
       return;
     }
 
     const timerInterval = setInterval(() => {
-      setElapsedTime((prev) => prev + 1);
+      if (isSectionExam) {
+        // Countdown timer for section exam
+        setTimeRemaining((prev) => {
+          if (prev <= 0) {
+            setIsTimerActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      } else {
+        // Count-up timer for syllabus exam
+        setElapsedTime((prev) => prev + 1);
+      }
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [isTimerActive, showScore]);
+  }, [isTimerActive, showScore, isSectionExam]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number): string => {
@@ -548,7 +593,13 @@ function QuestionsPageContent() {
           const correctCount = answers.filter((isCorrect) => isCorrect).length;
 
           // Calculate total_time (elapsed time in seconds)
-          const totalTimeSeconds = elapsedTime;
+          // For section exam: initial time - remaining time
+          // For syllabus exam: elapsed time
+          const totalTimeSeconds =
+            isSectionExam && sectionExamInfo
+              ? Math.floor(sectionExamInfo.time_for_section * 60) -
+                timeRemaining
+              : elapsedTime;
 
           // Get end_time (current timestamp in ISO format)
           const endTime = new Date().toISOString();
@@ -604,7 +655,7 @@ function QuestionsPageContent() {
                     exam_overview_id: userPracticeExam.exam_overview_id || 0,
                     section_id: userPracticeExam.section_id || 0,
                     syllabus_id: userPracticeExam.syllabus_id || 0,
-                    difficulty: userPracticeExam.difficulty || "easy",
+                    difficulty: userPracticeExam.difficulty ?? "",
                   });
                   console.log("Stored retry data:", {
                     user_id: userPracticeExam.user_id,
@@ -651,7 +702,13 @@ function QuestionsPageContent() {
     totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
 
   const handleBackToTopics = () => {
-    router.push(`/exams/${examId}/sections/${sectionId}/topics`);
+    if (isSectionExam) {
+      // For section exam flow, navigate to sections page with type=section query parameter
+      router.push(`/exams/${examId}/sections?type=section`);
+    } else {
+      // For syllabus exam flow, navigate to topics page
+      router.push(`/exams/${examId}/sections/${sectionId}/topics`);
+    }
   };
 
   const handleFinish = async () => {
@@ -732,7 +789,12 @@ function QuestionsPageContent() {
         const correctCount = answers.filter((isCorrect) => isCorrect).length;
 
         // Calculate total_time (elapsed time in seconds)
-        const totalTimeSeconds = elapsedTime;
+        // For section exam: initial time - remaining time
+        // For syllabus exam: elapsed time
+        const totalTimeSeconds =
+          isSectionExam && sectionExamInfo
+            ? Math.floor(sectionExamInfo.time_for_section * 60) - timeRemaining
+            : elapsedTime;
 
         // Get end_time (current timestamp in ISO format)
         const endTime = new Date().toISOString();
@@ -784,7 +846,7 @@ function QuestionsPageContent() {
                   exam_overview_id: userPracticeExam.exam_overview_id || 0,
                   section_id: userPracticeExam.section_id || 0,
                   syllabus_id: userPracticeExam.syllabus_id || 0,
-                  difficulty: userPracticeExam.difficulty || "easy",
+                  difficulty: userPracticeExam.difficulty ?? "",
                 });
                 console.log("Stored retry data (from Finish button):", {
                   user_id: userPracticeExam.user_id,
@@ -924,7 +986,13 @@ function QuestionsPageContent() {
     setQuestionResults(new Map());
     setNotVisitedQuestions(new Set());
     setNotAnsweredQuestions(new Set());
-    setElapsedTime(0); // Reset timer to zero
+    // Reset timer based on exam type
+    if (isSectionExam && sectionExamInfo) {
+      const timeInSeconds = Math.floor(sectionExamInfo.time_for_section * 60);
+      setTimeRemaining(timeInSeconds);
+    } else {
+      setElapsedTime(0); // Reset timer to zero for syllabus exam
+    }
     setIsTimerActive(true);
     firstQuestionInitialized.current = false; // Reset first question initialization flag
   };
@@ -1285,7 +1353,7 @@ function QuestionsPageContent() {
                   onClick={handleBackToTopics}
                   className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg shadow-sm transition duration-200"
                 >
-                  ← Back to Topics
+                  ← {isSectionExam ? "Back to Sections" : "Back to Topics"}
                 </button>
                 <button
                   onClick={handleRetry}
@@ -1479,12 +1547,56 @@ function QuestionsPageContent() {
               {/* Timer, Finish Button, and Progress Bar - Above Question Display */}
               {questions.length > 0 && !showScore && (
                 <div className="mb-6 space-y-4">
+                  {/* Section Exam Info - Only for section exam flow */}
+                  {isSectionExam && sectionExamInfo && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Total Marks:</span>
+                          <span className="ml-2 font-semibold text-gray-900">
+                            {sectionExamInfo.total_marks_section}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">
+                            No. of Questions:
+                          </span>
+                          <span className="ml-2 font-semibold text-gray-900">
+                            {sectionExamInfo.no_of_questions_section}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">
+                            Marks per Question:
+                          </span>
+                          <span className="ml-2 font-semibold text-gray-900">
+                            {sectionExamInfo.marks_per_question_section}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Time:</span>
+                          <span className="ml-2 font-semibold text-gray-900">
+                            {sectionExamInfo.time_for_section} min
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Timer and Finish Button Row */}
                   <div className="flex justify-between items-center">
                     {/* Timer - Top Left */}
-                    <div className="px-4 py-2 rounded-lg font-mono text-lg font-bold bg-blue-100 text-blue-700 border-2 border-blue-500">
+                    <div
+                      className={`px-4 py-2 rounded-lg font-mono text-lg font-bold border-2 ${
+                        isSectionExam && timeRemaining <= 60
+                          ? "bg-red-100 text-red-700 border-red-500"
+                          : "bg-blue-100 text-blue-700 border-blue-500"
+                      }`}
+                    >
                       <span className="mr-2">⏱️</span>
-                      {formatTime(elapsedTime)}
+                      {isSectionExam
+                        ? formatTime(timeRemaining)
+                        : formatTime(elapsedTime)}
                     </div>
 
                     {/* Finish Button - Top Right */}
@@ -1553,7 +1665,7 @@ function QuestionsPageContent() {
                         #{currentQuestionIndex + 1}
                       </h2>
                     </div>
-                    {currentQuestion.difficulty && (
+                    {!isSectionExam && currentQuestion.difficulty && (
                       <span
                         className={`px-4 py-2 rounded-lg text-sm font-medium ${
                           currentQuestion.difficulty === "easy"
@@ -1763,15 +1875,13 @@ function QuestionsPageContent() {
                       : "No questions found for the selected syllabus item."}
                   </p>
                   <button
-                    onClick={() =>
-                      router.push(
-                        `/exams/${examId}/sections/${sectionId}/topics`
-                      )
-                    }
+                    onClick={handleBackToTopics}
                     className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition duration-200 inline-flex items-center gap-2"
                   >
                     <span>←</span>
-                    <span>Back to Topics</span>
+                    <span>
+                      {isSectionExam ? "Back to Sections" : "Back to Topics"}
+                    </span>
                   </button>
                 </div>
               )}

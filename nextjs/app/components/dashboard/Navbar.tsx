@@ -29,6 +29,8 @@ export default function Navbar({
 }: NavbarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(false);
+  const [isPerformanceDropdownOpen, setIsPerformanceDropdownOpen] =
+    useState(false);
   const pathname = usePathname();
 
   const handleLogout = () => {
@@ -59,7 +61,7 @@ export default function Navbar({
                     key={item.name}
                     open={isExamsDropdownOpen}
                     onOpenChange={setIsExamsDropdownOpen}
-                    className="relative"
+                    className="space-y-1"
                   >
                     <CollapsibleTrigger
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
@@ -88,29 +90,83 @@ export default function Navbar({
                         />
                       </svg>
                     </CollapsibleTrigger>
-                    <CollapsibleContent className="absolute left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                      <div className="py-1">
-                        <button
-                          className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-not-allowed"
-                          disabled
-                        >
-                          Practice Full Exam
-                        </button>
-                        <Link
-                          href="/exams?type=section"
-                          onClick={() => setIsExamsDropdownOpen(false)}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                        >
-                          Practice Section Exam
-                        </Link>
-                        <Link
-                          href="/exams"
-                          onClick={() => setIsExamsDropdownOpen(false)}
-                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                        >
-                          Practice Syllabus Exam
-                        </Link>
+                    <CollapsibleContent className="pl-4 space-y-1 mt-1">
+                      <button
+                        className="w-full text-left px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 cursor-not-allowed rounded-lg"
+                        disabled
+                      >
+                        Practice Full Exam
+                      </button>
+                      <Link
+                        href="/exams?type=section"
+                        onClick={() => setIsExamsDropdownOpen(false)}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                      >
+                        Practice Section Exam
+                      </Link>
+                      <Link
+                        href="/exams"
+                        onClick={() => setIsExamsDropdownOpen(false)}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                      >
+                        Practice Syllabus Exam
+                      </Link>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              }
+              // Special handling for Performance dropdown
+              if (item.name === "Performance") {
+                return (
+                  <Collapsible
+                    key={item.name}
+                    open={isPerformanceDropdownOpen}
+                    onOpenChange={setIsPerformanceDropdownOpen}
+                    className="space-y-1"
+                  >
+                    <CollapsibleTrigger
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
+                        pathname === item.href ||
+                        pathname?.startsWith("/performance")
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <span className="mr-3 text-xl">{item.icon}</span>
+                        {item.name}
                       </div>
+                      <svg
+                        className={`w-4 h-4 transition-transform ${
+                          isPerformanceDropdownOpen ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pl-4 space-y-1 mt-1">
+                      <Link
+                        href="/performance?type=section"
+                        onClick={() => setIsPerformanceDropdownOpen(false)}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                      >
+                        Section Exam
+                      </Link>
+                      <Link
+                        href="/performance?type=syllabus"
+                        onClick={() => setIsPerformanceDropdownOpen(false)}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                      >
+                        Syllabus Exam
+                      </Link>
                     </CollapsibleContent>
                   </Collapsible>
                 );
@@ -301,6 +357,68 @@ export default function Navbar({
                               className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
                             >
                               Practice Syllabus Exam
+                            </Link>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    }
+                    // Special handling for Performance dropdown in mobile
+                    if (item.name === "Performance") {
+                      return (
+                        <Collapsible
+                          key={item.name}
+                          open={isPerformanceDropdownOpen}
+                          onOpenChange={setIsPerformanceDropdownOpen}
+                          className="space-y-1"
+                        >
+                          <CollapsibleTrigger
+                            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
+                              pathname === item.href ||
+                              pathname?.startsWith("/performance")
+                                ? "bg-blue-600 text-white"
+                                : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                            }`}
+                          >
+                            <div className="flex items-center">
+                              <span className="mr-3 text-xl">{item.icon}</span>
+                              {item.name}
+                            </div>
+                            <svg
+                              className={`w-4 h-4 transition-transform ${
+                                isPerformanceDropdownOpen ? "rotate-180" : ""
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="pl-4 space-y-1">
+                            <Link
+                              href="/performance?type=section"
+                              onClick={() => {
+                                setIsPerformanceDropdownOpen(false);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                            >
+                              Section Exam
+                            </Link>
+                            <Link
+                              href="/performance?type=syllabus"
+                              onClick={() => {
+                                setIsPerformanceDropdownOpen(false);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                            >
+                              Syllabus Exam
                             </Link>
                           </CollapsibleContent>
                         </Collapsible>

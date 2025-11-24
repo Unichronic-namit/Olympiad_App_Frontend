@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
   QUESTIONS: "/syllabus", // GET /syllabus/{syllabus_id}/questions
   SECTION_QUESTIONS: "/section", // GET /section/{section_id}/questions
   USER_PRACTICE_EXAM: "/user_practice_exam", // POST /user_practice_exam, GET /user_practice_exam/{user_id}
+  USER_PRACTICE_SECTION_EXAM: "/user_practice_section_exam", // GET /user_practice_section_exam/{user_id}
   PRACTICE_EXAM_ATTEMPT_DETAILS: "/practice_exam_attempt_details", // PUT /practice_exam_attempt_details/{practice_exam_attempt_details_id}
   PRACTICE_EXAM_ATTEMPT_DETAILS_FINISH: "/practice_exam_attempt_details_finish", // PUT /practice_exam_attempt_details_finish/{practice_exam_attempt_details_id}
 } as const;
