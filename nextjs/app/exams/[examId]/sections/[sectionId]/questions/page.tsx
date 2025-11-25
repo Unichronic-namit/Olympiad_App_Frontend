@@ -67,6 +67,7 @@ function QuestionsPageContent() {
   const [notAnsweredQuestions, setNotAnsweredQuestions] = useState<Set<number>>(
     new Set()
   ); // Track which questions have status 0 (not answered)
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false); // Loading state for submit answer button (section exam, last question only)
   const [showScore, setShowScore] = useState(false);
   const [startTime] = useState(Date.now());
   const [elapsedTime, setElapsedTime] = useState<number>(0); // Timer counting up from zero (for syllabus exam)
@@ -81,6 +82,8 @@ function QuestionsPageContent() {
   } | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile sidebar state
   const firstQuestionInitialized = useRef(false); // Track if first question PUT call has been made
+  const allQuestionsInitialized = useRef(false); // Track if all questions have been initialized
+  const autoFinishCalled = useRef(false); // Track if auto-finish has been called
   const [retryData, setRetryData] = useState<{
     user_id: number;
     exam_overview_id: number;
@@ -252,6 +255,10 @@ function QuestionsPageContent() {
           ? `${getApiUrl(
               API_ENDPOINTS.SECTION_QUESTIONS
             )}/${sectionId}/questions`
+          : difficultyParam
+          ? `${getApiUrl(
+              API_ENDPOINTS.QUESTIONS
+            )}/${syllabusId}/${difficultyParam.toLowerCase()}/questions`
           : `${getApiUrl(API_ENDPOINTS.QUESTIONS)}/${syllabusId}/questions`;
 
         console.log("Fetching questions from:", apiUrl);
@@ -311,16 +318,8 @@ function QuestionsPageContent() {
             ? data
             : data.questions || data.data || [];
 
-          // Filter only active questions
-          let activeQuestions = questionsData.filter((q) => q.is_active);
-
-          // Filter by difficulty if provided
-          if (difficultyParam) {
-            activeQuestions = activeQuestions.filter(
-              (q) =>
-                q.difficulty?.toLowerCase() === difficultyParam.toLowerCase()
-            );
-          }
+          // Filter only active questions (difficulty filtering is now done by backend)
+          const activeQuestions = questionsData.filter((q) => q.is_active);
 
           setQuestions(activeQuestions);
         }
@@ -403,12 +402,20 @@ function QuestionsPageContent() {
       );
 
       if (questionIndex !== -1) {
-        // Mark as visited (appears in API response)
-        visitedSet.add(questionIndex);
+        // Mark as visited (appears in API response) - but only if status is not 3
+        // Status 3 means "Not Visited", so it should not be in visitedSet
+        if (answer.status !== 3) {
+          visitedSet.add(questionIndex);
+        }
 
         // Check if status is 0 (not answered)
         if (answer.status === 0) {
           notAnsweredSet.add(questionIndex);
+        }
+
+        // Check if status is 3 (not visited)
+        if (answer.status === 3) {
+          // Don't add to visitedSet, will be added to notVisitedSet below
         }
 
         // Convert selected_answer letter (A, B, C, D) to index (0, 1, 2, 3)
@@ -430,11 +437,24 @@ function QuestionsPageContent() {
       }
     });
 
-    // Questions not in API response are not visited
+    // Questions not in API response OR with status 3 are not visited
     const notVisitedSet = new Set<number>();
     questions.forEach((_, index) => {
       if (!visitedSet.has(index)) {
         notVisitedSet.add(index);
+      }
+    });
+
+    // Also add questions with status 3 from API response to notVisitedSet
+    queAnsDetails.forEach((answer: any) => {
+      if (answer.status === 3) {
+        const questionId = answer.question_id;
+        const questionIndex = questions.findIndex(
+          (q) => q.question_id === questionId
+        );
+        if (questionIndex !== -1) {
+          notVisitedSet.add(questionIndex);
+        }
       }
     });
 
@@ -449,20 +469,33 @@ function QuestionsPageContent() {
   };
 
   const handleAnswerSelect = (answerIndex: number) => {
-    if (showResult) return; // Don't allow changing answer after submission
+    // For section exam: Allow changing answer even after submission
+    // For syllabus exam: Don't allow changing answer after submission
+    if (!isSectionExam && showResult) return;
     setSelectedAnswer(answerIndex);
   };
 
   const handleSubmitAnswer = async () => {
     if (selectedAnswer === null) return;
 
+    // Set loading state for section exam, last question only
+    const isLastQuestion = currentQuestionIndex === questions.length - 1;
+    if (isSectionExam && isLastQuestion) {
+      setIsSubmittingAnswer(true);
+    }
+
     const currentQuestion = questions[currentQuestionIndex];
     // Convert correct_option ("A", "B", "C", "D") to index (0, 1, 2, 3)
     const correctOptionIndex =
       currentQuestion.correct_option?.toUpperCase().charCodeAt(0) - 65;
     const correct = selectedAnswer === correctOptionIndex;
-    setIsCorrect(correct);
-    setShowResult(true);
+
+    // For section exam: Don't show result, just save
+    // For syllabus exam: Show result (current behavior)
+    if (!isSectionExam) {
+      setIsCorrect(correct);
+      setShowResult(true);
+    }
 
     // Track the answer result
     const newAnswers = [...answers];
@@ -475,11 +508,14 @@ function QuestionsPageContent() {
       new Map(prev).set(currentQuestionIndex, selectedAnswer)
     );
 
-    // Mark question as submitted and store the result
-    setSubmittedQuestions((prev) => new Set(prev).add(currentQuestionIndex));
-    setQuestionResults((prev) =>
-      new Map(prev).set(currentQuestionIndex, correct)
-    );
+    // Mark question as submitted and store the result (only for syllabus exam)
+    // For section exam, we don't mark as submitted so user can change answer
+    if (!isSectionExam) {
+      setSubmittedQuestions((prev) => new Set(prev).add(currentQuestionIndex));
+      setQuestionResults((prev) =>
+        new Map(prev).set(currentQuestionIndex, correct)
+      );
+    }
 
     // Remove from not visited and not answered sets if they were there
     setNotVisitedQuestions((prev) => {
@@ -555,6 +591,128 @@ function QuestionsPageContent() {
           } catch (parseError) {
             console.error("Failed to parse PUT response:", parseError);
           }
+
+          // Clear loading state for section exam, last question (after successful response)
+          if (isSectionExam && isLastQuestion) {
+            setIsSubmittingAnswer(false);
+          }
+
+          // After successful submission, move to next question (if not last question)
+          // If last question, finish exam
+          if (currentQuestionIndex < questions.length - 1) {
+            const nextIndex = currentQuestionIndex + 1;
+
+            // Check if question is already answered (green) or not answered (purple)
+            const isAnswered = answeredQuestions.has(nextIndex);
+            const isNotAnswered = notAnsweredQuestions.has(nextIndex);
+            const isNotVisited = notVisitedQuestions.has(nextIndex);
+
+            // Make PUT API call if question is "Not Visited" (status 3) to change it to "Not Answered" (status 0)
+            if (
+              isNotVisited &&
+              !isAnswered &&
+              !isNotAnswered &&
+              practiceExamAttemptDetailsId &&
+              questions.length > 0 &&
+              nextIndex < questions.length
+            ) {
+              const nextQuestion = questions[nextIndex];
+
+              try {
+                const nextQuestionPayload = {
+                  question_id: nextQuestion.question_id,
+                  question_no: nextIndex + 1, // Question number (1-indexed)
+                  status: 0, // 0 = Not Answered
+                  selected_answer: null,
+                };
+
+                console.log(
+                  "Moving to next question - PUT API call (Not Visited -> Not Answered):",
+                  {
+                    practiceExamAttemptDetailsId,
+                    question_id: nextQuestion.question_id,
+                    payload: nextQuestionPayload,
+                  }
+                );
+
+                const nextQuestionResponse = await fetch(
+                  `${getApiUrl(
+                    API_ENDPOINTS.PRACTICE_EXAM_ATTEMPT_DETAILS
+                  )}/${practiceExamAttemptDetailsId}`,
+                  {
+                    method: "PUT",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Accept: "application/json",
+                    },
+                    mode: "cors",
+                    body: JSON.stringify(nextQuestionPayload),
+                  }
+                );
+
+                const nextQuestionResponseText =
+                  await nextQuestionResponse.text();
+                console.log(
+                  "Next Question PUT API Response:",
+                  nextQuestionResponseText
+                );
+
+                if (nextQuestionResponse.ok) {
+                  // Parse and update state from response
+                  try {
+                    const nextQuestionResponseData = nextQuestionResponseText
+                      ? JSON.parse(nextQuestionResponseText)
+                      : null;
+                    if (nextQuestionResponseData) {
+                      updateStateFromPutResponse(nextQuestionResponseData);
+                    }
+                  } catch (parseError) {
+                    console.error(
+                      "Failed to parse next question PUT response:",
+                      parseError
+                    );
+                  }
+                } else {
+                  console.error(
+                    "Failed to update next question:",
+                    nextQuestionResponseText || nextQuestionResponse.status
+                  );
+                }
+              } catch (error: any) {
+                console.error("Error updating next question:", error);
+              }
+            }
+
+            // Remove from not visited set if it was there (even if API call was skipped)
+            if (isNotVisited) {
+              setNotVisitedQuestions((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(nextIndex);
+                return newSet;
+              });
+            }
+
+            // Add to not answered set if it was not visited (now it's visited but not answered)
+            if (isNotVisited && !isAnswered && !isNotAnswered) {
+              setNotAnsweredQuestions((prev) => new Set(prev).add(nextIndex));
+            }
+
+            setCurrentQuestionIndex(nextIndex);
+            // Restore the selected answer if this question was previously answered
+            const savedAnswer = questionAnswers.get(nextIndex);
+            setSelectedAnswer(savedAnswer !== undefined ? savedAnswer : null);
+
+            // If question was previously submitted, restore the result state
+            if (submittedQuestions.has(nextIndex)) {
+              const wasCorrect = questionResults.get(nextIndex) ?? false;
+              setIsCorrect(wasCorrect);
+              setShowResult(true);
+            } else {
+              setShowResult(false);
+              setIsCorrect(false);
+            }
+          }
+          // If it's the last question, do nothing - user must use the top right Finish button
         } else {
           let errorMessage = responseText;
           try {
@@ -568,9 +726,19 @@ function QuestionsPageContent() {
             errorMessage = responseText || `HTTP ${response.status}`;
           }
           console.error("Failed to submit answer:", errorMessage);
+
+          // Clear loading state on error
+          if (isSectionExam && isLastQuestion) {
+            setIsSubmittingAnswer(false);
+          }
         }
       } catch (error: any) {
         console.error("Error submitting answer:", error);
+
+        // Clear loading state on error
+        if (isSectionExam && isLastQuestion) {
+          setIsSubmittingAnswer(false);
+        }
       }
     }
   };
@@ -579,12 +747,109 @@ function QuestionsPageContent() {
     // Move to next question or finish exam
     if (currentQuestionIndex < questions.length - 1) {
       const nextIndex = currentQuestionIndex + 1;
+
+      // Check if question is already answered (green) or not answered (purple)
+      const isAnswered = answeredQuestions.has(nextIndex);
+      const isNotAnswered = notAnsweredQuestions.has(nextIndex);
+      const isNotVisited = notVisitedQuestions.has(nextIndex);
+
+      // Make PUT API call if question is "Not Visited" (status 3) to change it to "Not Answered" (status 0)
+      if (
+        isNotVisited &&
+        !isAnswered &&
+        !isNotAnswered &&
+        practiceExamAttemptDetailsId &&
+        questions.length > 0 &&
+        nextIndex < questions.length
+      ) {
+        const nextQuestion = questions[nextIndex];
+
+        try {
+          const requestPayload = {
+            question_id: nextQuestion.question_id,
+            question_no: nextIndex + 1, // Question number (1-indexed)
+            status: 0, // 0 = Not Answered
+            selected_answer: null,
+          };
+
+          console.log(
+            "Next Question - PUT API call (Not Visited -> Not Answered):",
+            {
+              practiceExamAttemptDetailsId,
+              question_id: nextQuestion.question_id,
+              payload: requestPayload,
+            }
+          );
+
+          const response = await fetch(
+            `${getApiUrl(
+              API_ENDPOINTS.PRACTICE_EXAM_ATTEMPT_DETAILS
+            )}/${practiceExamAttemptDetailsId}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              mode: "cors",
+              body: JSON.stringify(requestPayload),
+            }
+          );
+
+          const responseText = await response.text();
+          console.log("Next Question PUT API Response:", responseText);
+
+          if (response.ok) {
+            // Parse and update state from response
+            try {
+              const responseData = responseText
+                ? JSON.parse(responseText)
+                : null;
+              if (responseData) {
+                updateStateFromPutResponse(responseData);
+              }
+            } catch (parseError) {
+              console.error("Failed to parse PUT response:", parseError);
+            }
+          } else {
+            console.error(
+              "Failed to update next question:",
+              responseText || response.status
+            );
+          }
+        } catch (error: any) {
+          console.error("Error updating next question:", error);
+        }
+      }
+
+      // Remove from not visited set if it was there (even if API call was skipped)
+      if (isNotVisited) {
+        setNotVisitedQuestions((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(nextIndex);
+          return newSet;
+        });
+      }
+
+      // Add to not answered set if it was not visited (now it's visited but not answered)
+      if (isNotVisited && !isAnswered && !isNotAnswered) {
+        setNotAnsweredQuestions((prev) => new Set(prev).add(nextIndex));
+      }
+
       setCurrentQuestionIndex(nextIndex);
       // Restore the selected answer if this question was previously answered
       const savedAnswer = questionAnswers.get(nextIndex);
       setSelectedAnswer(savedAnswer !== undefined ? savedAnswer : null);
-      setShowResult(false);
-      setIsCorrect(false);
+
+      // If question was previously submitted, restore the result state
+      if (submittedQuestions.has(nextIndex)) {
+        const wasCorrect = questionResults.get(nextIndex) ?? false;
+        setIsCorrect(wasCorrect);
+        setShowResult(true);
+      } else {
+        setShowResult(false);
+        setIsCorrect(false);
+      }
     } else {
       // All questions completed - call finish API
       if (practiceExamAttemptDetailsId) {
@@ -884,6 +1149,30 @@ function QuestionsPageContent() {
     setShowScore(true);
   };
 
+  // Auto-finish when time reaches 0 for section exam
+  useEffect(() => {
+    if (
+      isSectionExam &&
+      timeRemaining <= 0 &&
+      isTimerActive &&
+      !showScore &&
+      practiceExamAttemptDetailsId &&
+      !autoFinishCalled.current &&
+      questions.length > 0
+    ) {
+      console.log("Time reached 0 - Auto-finishing section exam");
+      autoFinishCalled.current = true;
+      handleFinish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    timeRemaining,
+    isSectionExam,
+    isTimerActive,
+    showScore,
+    practiceExamAttemptDetailsId,
+  ]);
+
   const handleRetry = async () => {
     // Make POST call to start new practice session
     if (retryData) {
@@ -995,6 +1284,8 @@ function QuestionsPageContent() {
     }
     setIsTimerActive(true);
     firstQuestionInitialized.current = false; // Reset first question initialization flag
+    allQuestionsInitialized.current = false; // Reset all questions initialization flag
+    autoFinishCalled.current = false; // Reset auto-finish flag
   };
 
   const handleQuestionClick = async (index: number) => {
@@ -1102,6 +1393,82 @@ function QuestionsPageContent() {
     }
   };
 
+  // Initialize remaining questions with status 3 (not visited) for both syllabus and section exam flows
+  const initializeRemainingQuestions = async () => {
+    if (
+      !practiceExamAttemptDetailsId ||
+      questions.length <= 1 ||
+      allQuestionsInitialized.current
+    ) {
+      return;
+    }
+
+    try {
+      // Initialize all questions from index 1 onwards with status 3
+      const remainingQuestions = questions.slice(1);
+
+      // Make PUT calls for all remaining questions
+      const putPromises = remainingQuestions.map(async (question, index) => {
+        const questionNo = index + 2; // Question numbers start from 2 (since first is 1)
+
+        const requestPayload = {
+          question_id: question.question_id,
+          question_no: questionNo,
+          status: 3, // Not visited
+          selected_answer: null,
+        };
+
+        try {
+          const response = await fetch(
+            `${getApiUrl(
+              API_ENDPOINTS.PRACTICE_EXAM_ATTEMPT_DETAILS
+            )}/${practiceExamAttemptDetailsId}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              mode: "cors",
+              body: JSON.stringify(requestPayload),
+            }
+          );
+
+          if (response.ok) {
+            const responseText = await response.text();
+            try {
+              const responseData = responseText
+                ? JSON.parse(responseText)
+                : null;
+              if (responseData) {
+                updateStateFromPutResponse(responseData);
+              }
+            } catch (parseError) {
+              console.error(
+                `Failed to parse PUT response for question ${questionNo}:`,
+                parseError
+              );
+            }
+          } else {
+            console.error(
+              `Failed to initialize question ${questionNo}:`,
+              await response.text()
+            );
+          }
+        } catch (error) {
+          console.error(`Error initializing question ${questionNo}:`, error);
+        }
+      });
+
+      // Wait for all PUT calls to complete
+      await Promise.all(putPromises);
+      allQuestionsInitialized.current = true;
+      console.log("All remaining questions initialized with status 3");
+    } catch (error: any) {
+      console.error("Error initializing remaining questions:", error);
+    }
+  };
+
   // PUT API call for first question when page loads
   useEffect(() => {
     const initializeFirstQuestion = async () => {
@@ -1162,6 +1529,11 @@ function QuestionsPageContent() {
             }
             // Mark as initialized only on success
             firstQuestionInitialized.current = true;
+
+            // For both syllabus and section exam flows, initialize all remaining questions with status 3 (not visited)
+            if (questions.length > 1) {
+              initializeRemainingQuestions();
+            }
           } else {
             console.error(
               "Failed to initialize first question:",
@@ -1182,7 +1554,12 @@ function QuestionsPageContent() {
     ) {
       initializeFirstQuestion();
     }
-  }, [practiceExamAttemptDetailsId, questions, currentQuestionIndex]);
+  }, [
+    practiceExamAttemptDetailsId,
+    questions,
+    currentQuestionIndex,
+    isSectionExam,
+  ]);
 
   // Restore saved answer and result state when current question changes
   useEffect(() => {
@@ -1586,17 +1963,31 @@ function QuestionsPageContent() {
                   {/* Timer and Finish Button Row */}
                   <div className="flex justify-between items-center">
                     {/* Timer - Top Left */}
-                    <div
-                      className={`px-4 py-2 rounded-lg font-mono text-lg font-bold border-2 ${
-                        isSectionExam && timeRemaining <= 60
-                          ? "bg-red-100 text-red-700 border-red-500"
-                          : "bg-blue-100 text-blue-700 border-blue-500"
-                      }`}
-                    >
-                      <span className="mr-2">⏱️</span>
-                      {isSectionExam
-                        ? formatTime(timeRemaining)
-                        : formatTime(elapsedTime)}
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`px-4 py-2 rounded-lg font-mono text-lg font-bold border-2 ${
+                          isSectionExam && timeRemaining <= 60
+                            ? "bg-red-100 text-red-700 border-red-500"
+                            : "bg-blue-100 text-blue-700 border-blue-500"
+                        }`}
+                      >
+                        <span className="mr-2">⏱️</span>
+                        {isSectionExam
+                          ? formatTime(timeRemaining)
+                          : formatTime(elapsedTime)}
+                      </div>
+                      {/* Warning Message for Section Exam */}
+                      {isSectionExam &&
+                        timeRemaining > 0 &&
+                        timeRemaining <= 60 && (
+                          <div className="px-3 py-1 bg-red-100 border border-red-300 rounded-lg">
+                            <p className="text-sm font-semibold text-red-700">
+                              {timeRemaining <= 30
+                                ? "⚠️ Time running out! Submit your answers quickly!"
+                                : "⏰ Less than 1 minute remaining!"}
+                            </p>
+                          </div>
+                        )}
                     </div>
 
                     {/* Finish Button - Top Right */}
@@ -1729,7 +2120,9 @@ function QuestionsPageContent() {
                           ?.toUpperCase()
                           .charCodeAt(0) - 65;
                       let optionStyle = "";
-                      if (showResult) {
+                      // For section exam: Don't show result colors, just show selected
+                      // For syllabus exam: Show result colors (correct/incorrect)
+                      if (!isSectionExam && showResult) {
                         if (index === correctOptionIndex) {
                           optionStyle =
                             "bg-green-100 border-green-500 text-green-900";
@@ -1753,7 +2146,7 @@ function QuestionsPageContent() {
                         <button
                           key={index}
                           onClick={() => handleAnswerSelect(index)}
-                          disabled={showResult}
+                          disabled={!isSectionExam && showResult}
                           className={`w-full text-left p-4 rounded-lg border-2 transition ${optionStyle}`}
                         >
                           <div className="flex items-start">
@@ -1779,12 +2172,15 @@ function QuestionsPageContent() {
                                 </div>
                               )}
                             </div>
-                            {showResult && index === correctOptionIndex && (
-                              <span className="ml-auto text-green-700 font-semibold whitespace-nowrap">
-                                ✓ Correct
-                              </span>
-                            )}
-                            {showResult &&
+                            {!isSectionExam &&
+                              showResult &&
+                              index === correctOptionIndex && (
+                                <span className="ml-auto text-green-700 font-semibold whitespace-nowrap">
+                                  ✓ Correct
+                                </span>
+                              )}
+                            {!isSectionExam &&
+                              showResult &&
                               index === selectedAnswer &&
                               index !== correctOptionIndex && (
                                 <span className="ml-auto text-red-700 font-semibold whitespace-nowrap">
@@ -1797,8 +2193,8 @@ function QuestionsPageContent() {
                     })}
                   </div>
 
-                  {/* Result Message */}
-                  {showResult && (
+                  {/* Result Message - Only for syllabus exam */}
+                  {!isSectionExam && showResult && (
                     <div
                       className={`p-4 rounded-lg mb-6 ${
                         isCorrect
@@ -1818,46 +2214,71 @@ function QuestionsPageContent() {
                     </div>
                   )}
 
-                  {/* Solution */}
-                  {showResult && !isCorrect && currentQuestion.solution && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-                      <h3 className="font-semibold text-blue-900 mb-2">
-                        Solution:
-                      </h3>
-                      <p className="text-blue-800">
-                        {currentQuestion.solution}
-                      </p>
-                    </div>
-                  )}
+                  {/* Solution - Only for syllabus exam */}
+                  {!isSectionExam &&
+                    showResult &&
+                    !isCorrect &&
+                    currentQuestion.solution && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                        <h3 className="font-semibold text-blue-900 mb-2">
+                          Solution:
+                        </h3>
+                        <p className="text-blue-800">
+                          {currentQuestion.solution}
+                        </p>
+                      </div>
+                    )}
 
                   {/* Action Buttons */}
                   <div className="flex gap-4">
-                    {!showResult ? (
-                      <button
-                        onClick={handleSubmitAnswer}
-                        disabled={
-                          selectedAnswer === null ||
-                          submittedQuestions.has(currentQuestionIndex)
-                        }
-                        className={`flex-1 py-3 rounded-lg font-semibold transition ${
-                          selectedAnswer !== null &&
-                          !submittedQuestions.has(currentQuestionIndex)
-                            ? "bg-blue-600 hover:bg-blue-700 text-white"
-                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        }`}
-                      >
-                        Submit Answer
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleNextQuestion}
-                        className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition"
-                      >
-                        {currentQuestionIndex < questions.length - 1
-                          ? "Next Question"
-                          : "Finish"}
-                      </button>
-                    )}
+                    {/* Submit Answer button - automatically moves to next question after submission */}
+                    <button
+                      onClick={handleSubmitAnswer}
+                      disabled={
+                        // For section exam: Only disable if no answer selected or loading
+                        // For syllabus exam: Disable if no answer selected OR already submitted
+                        selectedAnswer === null ||
+                        isSubmittingAnswer ||
+                        (!isSectionExam &&
+                          submittedQuestions.has(currentQuestionIndex))
+                      }
+                      className={`flex-1 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                        selectedAnswer !== null &&
+                        !isSubmittingAnswer &&
+                        (isSectionExam ||
+                          !submittedQuestions.has(currentQuestionIndex))
+                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      {isSubmittingAnswer ? (
+                        <>
+                          <svg
+                            className="animate-spin h-5 w-5 text-white"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                          </svg>
+                          <span>Submitting...</span>
+                        </>
+                      ) : (
+                        "Submit Answer"
+                      )}
+                    </button>
                   </div>
                 </div>
               )}

@@ -38,10 +38,11 @@ export default function TopicsPage() {
   const [topicDifficulties, setTopicDifficulties] = useState<
     Record<string, string>
   >({});
-  // Track question counts for each syllabus_id
-  const [questionCounts, setQuestionCounts] = useState<Record<number, number>>(
-    {}
-  );
+  // Track question counts for each syllabus_id and difficulty combination
+  // Structure: { syllabus_id: { difficulty: count } }
+  const [questionCounts, setQuestionCounts] = useState<
+    Record<number, Record<string, number>>
+  >({});
 
   useEffect(() => {
     // Check if user is authenticated
@@ -131,14 +132,17 @@ export default function TopicsPage() {
         });
         setTopicDifficulties(initialDifficulties);
 
-        // Fetch question counts for each syllabus item
-        const counts: Record<number, number> = {};
+        // Fetch question counts for each syllabus item with default difficulty "Easy"
+        // We'll fetch counts for all difficulties when difficulty changes
+        const counts: Record<number, Record<string, number>> = {};
+        const defaultDifficulty = "Easy";
+
         const fetchPromises = syllabusData.map(async (item) => {
           try {
             const questionsResponse = await fetch(
               `${getApiUrl(API_ENDPOINTS.QUESTIONS)}/${
                 item.syllabus_id
-              }/questions`,
+              }/${defaultDifficulty.toLowerCase()}/questions`,
               {
                 method: "GET",
                 headers: {
@@ -162,23 +166,36 @@ export default function TopicsPage() {
                 const activeQuestions = questionsArray.filter(
                   (q: any) => q.is_active
                 );
-                counts[item.syllabus_id] = activeQuestions.length;
+                if (!counts[item.syllabus_id]) {
+                  counts[item.syllabus_id] = {};
+                }
+                counts[item.syllabus_id][defaultDifficulty] =
+                  activeQuestions.length;
               } catch (parseError) {
                 console.error(
                   `Failed to parse questions for syllabus ${item.syllabus_id}:`,
                   parseError
                 );
-                counts[item.syllabus_id] = 0;
+                if (!counts[item.syllabus_id]) {
+                  counts[item.syllabus_id] = {};
+                }
+                counts[item.syllabus_id][defaultDifficulty] = 0;
               }
             } else {
-              counts[item.syllabus_id] = 0;
+              if (!counts[item.syllabus_id]) {
+                counts[item.syllabus_id] = {};
+              }
+              counts[item.syllabus_id][defaultDifficulty] = 0;
             }
           } catch (error) {
             console.error(
               `Error fetching questions for syllabus ${item.syllabus_id}:`,
               error
             );
-            counts[item.syllabus_id] = 0;
+            if (!counts[item.syllabus_id]) {
+              counts[item.syllabus_id] = {};
+            }
+            counts[item.syllabus_id][defaultDifficulty] = 0;
           }
         });
 
@@ -200,11 +217,85 @@ export default function TopicsPage() {
     }
   }, [userData, sectionId]);
 
-  const handleDifficultyChange = (topic: string, difficulty: string) => {
+  const handleDifficultyChange = async (topic: string, difficulty: string) => {
     setTopicDifficulties((prev) => ({
       ...prev,
       [topic]: difficulty,
     }));
+
+    // Fetch question counts for all syllabus items in this topic with the new difficulty
+    const topicGroup = groupedTopics.find((g) => g.topic === topic);
+    if (!topicGroup) return;
+
+    const counts: Record<number, Record<string, number>> = {
+      ...questionCounts,
+    };
+    const difficultyLower = difficulty.toLowerCase();
+
+    const fetchPromises = topicGroup.syllabusItems.map(async (item) => {
+      try {
+        const questionsResponse = await fetch(
+          `${getApiUrl(API_ENDPOINTS.QUESTIONS)}/${
+            item.syllabus_id
+          }/${difficultyLower}/questions`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+          }
+        );
+
+        if (questionsResponse.ok) {
+          const questionsText = await questionsResponse.text();
+          try {
+            const questionsData = questionsText
+              ? JSON.parse(questionsText)
+              : [];
+            const questionsArray = Array.isArray(questionsData)
+              ? questionsData
+              : questionsData.questions || questionsData.data || [];
+            // Count only active questions
+            const activeQuestions = questionsArray.filter(
+              (q: any) => q.is_active
+            );
+            if (!counts[item.syllabus_id]) {
+              counts[item.syllabus_id] = {};
+            }
+            counts[item.syllabus_id][difficulty] = activeQuestions.length;
+          } catch (parseError) {
+            console.error(
+              `Failed to parse questions for syllabus ${item.syllabus_id}:`,
+              parseError
+            );
+            if (!counts[item.syllabus_id]) {
+              counts[item.syllabus_id] = {};
+            }
+            counts[item.syllabus_id][difficulty] = 0;
+          }
+        } else {
+          if (!counts[item.syllabus_id]) {
+            counts[item.syllabus_id] = {};
+          }
+          counts[item.syllabus_id][difficulty] = 0;
+        }
+      } catch (error) {
+        console.error(
+          `Error fetching questions for syllabus ${item.syllabus_id}:`,
+          error
+        );
+        if (!counts[item.syllabus_id]) {
+          counts[item.syllabus_id] = {};
+        }
+        counts[item.syllabus_id][difficulty] = 0;
+      }
+    });
+
+    // Wait for all question count fetches to complete
+    await Promise.all(fetchPromises);
+    setQuestionCounts(counts);
   };
 
   const getTopicDifficulty = (topic: string): string => {
@@ -446,16 +537,19 @@ export default function TopicsPage() {
                                   {item.subtopic || group.topic}
                                 </span>
                                 <span className="text-xs text-gray-500 mt-1">
-                                  {questionCounts[item.syllabus_id] !==
-                                  undefined
-                                    ? `${
-                                        questionCounts[item.syllabus_id]
-                                      } question${
-                                        questionCounts[item.syllabus_id] !== 1
-                                          ? "s"
-                                          : ""
-                                      }`
-                                    : "Loading..."}
+                                  {(() => {
+                                    const currentDifficulty =
+                                      getTopicDifficulty(group.topic);
+                                    const count =
+                                      questionCounts[item.syllabus_id]?.[
+                                        currentDifficulty
+                                      ];
+                                    return count !== undefined
+                                      ? `${count} question${
+                                          count !== 1 ? "s" : ""
+                                        }`
+                                      : "Loading...";
+                                  })()}
                                 </span>
                               </div>
                             </div>
