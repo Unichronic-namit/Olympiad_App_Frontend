@@ -236,7 +236,10 @@ export default function SectionsPage() {
           {/* Page Header */}
           <div className="mb-6">
             <button
-              onClick={() => router.push("/exams")}
+              onClick={() => {
+                const url = examType ? `/exams?type=${examType}` : "/exams";
+                router.push(url);
+              }}
               className="text-blue-600 hover:text-blue-700 mb-4 flex items-center"
             >
               ← Back to Exams

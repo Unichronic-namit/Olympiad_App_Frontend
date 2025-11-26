@@ -36,6 +36,7 @@ export default function Navbar({
   const handleLogout = () => {
     localStorage.removeItem("authenticated");
     localStorage.removeItem("user_data");
+    localStorage.clear();
     window.location.href = "/login";
   };
 

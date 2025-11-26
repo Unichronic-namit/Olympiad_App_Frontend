@@ -255,12 +255,13 @@ export default function PerformanceClient() {
             (q: any) => q.status === 2
           ).length;
 
-          // Get questions_data from API response
+          // Get questions_data from API response (only for syllabus flow)
           const questionsData = item.questions?.questions_data || [];
 
-          // Get total questions from questions_data length
-          const totalQuestions =
-            questionsData.length || queAnsDetails.length || 0;
+          // Get total questions - for section flow use que_ans_details.length, for syllabus flow use questions_data.length
+          const totalQuestions = isSectionExam
+            ? queAnsDetails.length || 0
+            : questionsData.length || queAnsDetails.length || 0;
 
           // Transform question attempts - use questions_data as source, match with que_ans_details
           const questionAttempts: QuestionAttempt[] = questionsData.map(
@@ -1093,7 +1094,7 @@ export default function PerformanceClient() {
                                         {isNotVisited
                                           ? "Not Visited"
                                           : isNotAttempted
-                                          ? "Not Attempted"
+                                          ? "Not Answered"
                                           : isCorrect
                                           ? "✓ Correct"
                                           : "✗ Incorrect"}

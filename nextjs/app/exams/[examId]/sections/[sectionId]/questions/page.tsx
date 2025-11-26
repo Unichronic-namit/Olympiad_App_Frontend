@@ -91,6 +91,12 @@ function QuestionsPageContent() {
     syllabus_id: number;
     difficulty: string;
   } | null>(null); // Store data for retry exam POST call
+  const [finalApiCorrectCount, setFinalApiCorrectCount] = useState<
+    number | null
+  >(null); // Store correct count from final API response
+  const [finalApiIncorrectCount, setFinalApiIncorrectCount] = useState<
+    number | null
+  >(null); // Store incorrect count from final API response
 
   useEffect(() => {
     // Check if user is authenticated
@@ -375,6 +381,30 @@ function QuestionsPageContent() {
       .padStart(2, "0")}`;
   };
 
+  // Helper function to calculate correct/incorrect counts from final API response
+  const calculateCountsFromFinalResponse = (responseData: any) => {
+    if (
+      !responseData ||
+      !responseData.que_ans_details ||
+      !Array.isArray(responseData.que_ans_details)
+    ) {
+      return { correctCount: 0, incorrectCount: 0 };
+    }
+
+    let correctCount = 0;
+    let incorrectCount = 0;
+
+    responseData.que_ans_details.forEach((answer: any) => {
+      if (answer.status === 1) {
+        correctCount++;
+      } else if (answer.status === 2) {
+        incorrectCount++;
+      }
+    });
+
+    return { correctCount, incorrectCount };
+  };
+
   // Helper function to update state from PUT response
   const updateStateFromPutResponse = (responseData: any) => {
     if (
@@ -597,9 +627,9 @@ function QuestionsPageContent() {
             setIsSubmittingAnswer(false);
           }
 
-          // After successful submission, move to next question (if not last question)
-          // If last question, finish exam
-          if (currentQuestionIndex < questions.length - 1) {
+          // After successful submission, move to next question (only for section exam flow)
+          // For syllabus exam: Show result, user clicks "Next Question" button
+          if (isSectionExam && currentQuestionIndex < questions.length - 1) {
             const nextIndex = currentQuestionIndex + 1;
 
             // Check if question is already answered (green) or not answered (purple)
@@ -908,6 +938,18 @@ function QuestionsPageContent() {
                 ? JSON.parse(finishResponseText)
                 : null;
               if (finishResponseData) {
+                // Calculate correct/incorrect counts from final API response
+                const { correctCount, incorrectCount } =
+                  calculateCountsFromFinalResponse(finishResponseData);
+                setFinalApiCorrectCount(correctCount);
+                setFinalApiIncorrectCount(incorrectCount);
+                console.log(
+                  "Final API counts - Correct:",
+                  correctCount,
+                  "Incorrect:",
+                  incorrectCount
+                );
+
                 // Update state from finish response if needed
                 updateStateFromPutResponse(finishResponseData);
 
@@ -959,9 +1001,15 @@ function QuestionsPageContent() {
     }
   };
 
-  // Calculate score
-  const correctCount = answers.filter((isCorrect) => isCorrect).length;
-  const incorrectCount = answers.filter((isCorrect) => !isCorrect).length;
+  // Calculate score - use API response data if available, otherwise use local state
+  const correctCount =
+    finalApiCorrectCount !== null
+      ? finalApiCorrectCount
+      : answers.filter((isCorrect) => isCorrect).length;
+  const incorrectCount =
+    finalApiIncorrectCount !== null
+      ? finalApiIncorrectCount
+      : answers.filter((isCorrect) => !isCorrect).length;
   const totalQuestions = questions.length;
   const scorePercentage =
     totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
@@ -1100,6 +1148,18 @@ function QuestionsPageContent() {
               ? JSON.parse(finishResponseText)
               : null;
             if (finishResponseData) {
+              // Calculate correct/incorrect counts from final API response
+              const { correctCount, incorrectCount } =
+                calculateCountsFromFinalResponse(finishResponseData);
+              setFinalApiCorrectCount(correctCount);
+              setFinalApiIncorrectCount(incorrectCount);
+              console.log(
+                "Final API counts (from Finish button) - Correct:",
+                correctCount,
+                "Incorrect:",
+                incorrectCount
+              );
+
               // Update state from finish response if needed
               updateStateFromPutResponse(finishResponseData);
 
@@ -1275,6 +1335,8 @@ function QuestionsPageContent() {
     setQuestionResults(new Map());
     setNotVisitedQuestions(new Set());
     setNotAnsweredQuestions(new Set());
+    setFinalApiCorrectCount(null);
+    setFinalApiIncorrectCount(null);
     // Reset timer based on exam type
     if (isSectionExam && sectionExamInfo) {
       const timeInSeconds = Math.floor(sectionExamInfo.time_for_section * 60);
@@ -2231,54 +2293,68 @@ function QuestionsPageContent() {
 
                   {/* Action Buttons */}
                   <div className="flex gap-4">
-                    {/* Submit Answer button - automatically moves to next question after submission */}
-                    <button
-                      onClick={handleSubmitAnswer}
-                      disabled={
-                        // For section exam: Only disable if no answer selected or loading
-                        // For syllabus exam: Disable if no answer selected OR already submitted
-                        selectedAnswer === null ||
-                        isSubmittingAnswer ||
-                        (!isSectionExam &&
-                          submittedQuestions.has(currentQuestionIndex))
-                      }
-                      className={`flex-1 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
-                        selectedAnswer !== null &&
-                        !isSubmittingAnswer &&
-                        (isSectionExam ||
-                          !submittedQuestions.has(currentQuestionIndex))
-                          ? "bg-blue-600 hover:bg-blue-700 text-white"
-                          : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      }`}
-                    >
-                      {isSubmittingAnswer ? (
-                        <>
-                          <svg
-                            className="animate-spin h-5 w-5 text-white"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          <span>Submitting...</span>
-                        </>
-                      ) : (
-                        "Submit Answer"
-                      )}
-                    </button>
+                    {/* For section exam: Submit Answer button automatically moves to next question */}
+                    {/* For syllabus exam: Submit Answer shows result, then Next Question button appears */}
+                    {isSectionExam || !showResult ? (
+                      <button
+                        onClick={handleSubmitAnswer}
+                        disabled={
+                          // For section exam: Only disable if no answer selected or loading
+                          // For syllabus exam: Disable if no answer selected OR already submitted
+                          selectedAnswer === null ||
+                          isSubmittingAnswer ||
+                          (!isSectionExam &&
+                            submittedQuestions.has(currentQuestionIndex))
+                        }
+                        className={`flex-1 py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                          selectedAnswer !== null &&
+                          !isSubmittingAnswer &&
+                          (isSectionExam ||
+                            !submittedQuestions.has(currentQuestionIndex))
+                            ? "bg-blue-600 hover:bg-blue-700 text-white"
+                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        }`}
+                      >
+                        {isSubmittingAnswer ? (
+                          <>
+                            <svg
+                              className="animate-spin h-5 w-5 text-white"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              ></circle>
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              ></path>
+                            </svg>
+                            <span>Submitting...</span>
+                          </>
+                        ) : (
+                          "Submit Answer"
+                        )}
+                      </button>
+                    ) : null}
+                    {/* For syllabus exam: Show Next Question button after submitting */}
+                    {!isSectionExam && showResult && (
+                      <button
+                        onClick={handleNextQuestion}
+                        className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition"
+                      >
+                        {currentQuestionIndex < questions.length - 1
+                          ? "Next Question"
+                          : "Finish"}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
