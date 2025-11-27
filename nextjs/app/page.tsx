@@ -117,7 +117,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 text-gray-600 py-8">
         <div className="container mx-auto px-6 text-center">
-          <p>© 2024 Olympiad Prep. All rights reserved.</p>
+          <p>© 2025 Olympiad Prep. All rights reserved.</p>
         </div>
       </footer>
     </div>
