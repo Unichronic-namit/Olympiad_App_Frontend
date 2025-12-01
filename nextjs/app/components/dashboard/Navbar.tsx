@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Cookies from "js-cookie";
 import {
   Collapsible,
   CollapsibleContent,
@@ -34,9 +35,22 @@ export default function Navbar({
   const pathname = usePathname();
 
   const handleLogout = () => {
+    // Clear cookies (session data)
+    Cookies.remove("authenticated");
+    Cookies.remove("session_userid");
+    Cookies.remove("session_email");
+    Cookies.remove("session_password");
+
+    // Clear localStorage
     localStorage.removeItem("authenticated");
     localStorage.removeItem("user_data");
+    localStorage.removeItem("session_userid");
+    localStorage.removeItem("session_email");
+    localStorage.removeItem("session_password");
+
+    // Clear all other localStorage items
     localStorage.clear();
+
     window.location.href = "/login";
   };
 
@@ -106,7 +120,7 @@ export default function Navbar({
                         Practice Section Exam
                       </Link>
                       <Link
-                        href="/exams"
+                        href="/exams?type=syllabus"
                         onClick={() => setIsExamsDropdownOpen(false)}
                         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
                       >
@@ -350,7 +364,7 @@ export default function Navbar({
                               Practice Section Exam
                             </Link>
                             <Link
-                              href="/exams"
+                              href="/exams?type=syllabus"
                               onClick={() => {
                                 setIsExamsDropdownOpen(false);
                                 setIsMobileMenuOpen(false);
