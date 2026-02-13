@@ -1,0 +1,294 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { getApiUrl, API_ENDPOINTS } from "../../app/config/api";
+import SectionCard from "./sectionCard";
+
+type Section = {
+  section_id: number;
+  exam_overview_id: number;
+  section: string;
+  no_of_questions: number;
+  marks_per_question: number;
+  total_marks: number;
+};
+
+export default function Sections() {
+  const router = useRouter();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const examId = params.examId as string;
+  const [userData, setUserData] = useState<any>(null);
+  const examType = searchParams.get("type");
+  const [sections, setSections] = useState<Section[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [examInfo, setExamInfo] = useState<any>(null);
+
+  // Handle Start Practice for Section Exam flow
+  const handleStartPractice = async (sectionId: number) => {
+    try {
+      // Get user_id from userData
+      if (!userData || !userData.user_id) {
+        console.error("User ID not found");
+        setError("User ID not found. Please login again.");
+        return;
+      }
+
+      // Prepare request payload - syllabus_id as 0 and difficulty as null/empty
+      const requestPayload = {
+        user_id: parseInt(userData.user_id),
+        exam_overview_id: parseInt(examId),
+        section_id: sectionId,
+        syllabus_id: 0,
+        difficulty: "",
+      };
+
+      console.log("Starting practice with payload:", requestPayload);
+      console.log("API URL:", getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM));
+
+      // Call POST API
+      const response = await fetch(
+        getApiUrl(API_ENDPOINTS.USER_PRACTICE_EXAM),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          mode: "cors",
+          body: JSON.stringify(requestPayload),
+        }
+      );
+
+      const responseText = await response.text();
+      console.log("User Practice Exam POST Response Status:", response.status);
+      console.log("User Practice Exam POST Response:", responseText);
+
+      let practiceExamAttemptDetailsId: number | null = null;
+
+      if (!response.ok) {
+        let errorMessage = responseText;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage =
+            errorData.detail ||
+            errorData.message ||
+            errorData.error ||
+            responseText;
+        } catch {
+          // Use text as is if parsing fails
+          errorMessage = responseText || `HTTP ${response.status}`;
+        }
+        console.error("Failed to start practice:", errorMessage);
+        setError(errorMessage);
+      } else {
+        console.log("Practice session started successfully");
+        // Parse response to get practice_exam_attempt_details_id
+        try {
+          const responseData = responseText ? JSON.parse(responseText) : {};
+          // Try different possible response formats
+          practiceExamAttemptDetailsId =
+            responseData.practice_exam_attempt_details_id ||
+            responseData.id ||
+            responseData.attempt_id ||
+            (Array.isArray(responseData) && responseData.length > 0
+              ? responseData[0].practice_exam_attempt_details_id ||
+                responseData[0].id
+              : null);
+          console.log(
+            "Practice Exam Attempt Details ID:",
+            practiceExamAttemptDetailsId
+          );
+
+          // Store practice_exam_attempt_details_id in localStorage
+          if (practiceExamAttemptDetailsId) {
+            localStorage.setItem(
+              "practice_exam_attempt_details_id",
+              practiceExamAttemptDetailsId.toString()
+            );
+            console.log(
+              "Stored practice_exam_attempt_details_id in localStorage:",
+              practiceExamAttemptDetailsId
+            );
+          }
+        } catch (parseError) {
+          console.error("Failed to parse response:", parseError);
+        }
+
+        // Navigate to questions page with section exam flag
+        router.push(
+          `/exams/${examId}/sections/${sectionId}/questions?examType=section`
+        );
+      }
+    } catch (error: any) {
+      console.error("Error starting practice:", error);
+      setError(error.message || "Failed to start practice. Please try again.");
+    }
+  };
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const authenticated = localStorage.getItem("authenticated");
+    const storedUserData = localStorage.getItem("user_data");
+
+    if (!authenticated || !storedUserData) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setUserData(JSON.parse(storedUserData));
+    } catch (error) {
+      console.error("Error parsing user data:", error);
+      router.push("/login");
+    }
+  }, [router]);
+
+  useEffect(() => {
+    // Fetch sections from API
+    const fetchSections = async () => {
+      if (!userData || !examId) return;
+
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch(
+          `${getApiUrl(API_ENDPOINTS.SECTIONS)}/${examId}/sections`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+          }
+        );
+
+        const responseText = await response.text();
+        console.log("Sections API Response:", responseText);
+
+        if (!response.ok) {
+          throw new Error(
+            responseText || `Failed to fetch sections: ${response.status}`
+          );
+        }
+
+        let data: any;
+        try {
+          data = responseText ? JSON.parse(responseText) : [];
+        } catch (parseError) {
+          console.error("Failed to parse JSON:", parseError);
+          throw new Error("Invalid response from server");
+        }
+
+        // Handle both array and object responses
+        const sectionsData = Array.isArray(data)
+          ? data
+          : data.sections || data.data || [];
+
+        setSections(sectionsData);
+
+        // Extract exam info from first section (all sections have same exam, grade, level)
+        if (sectionsData.length > 0 && sectionsData[0]) {
+          const firstSection = sectionsData[0];
+          setExamInfo({
+            exam: firstSection.exam,
+            grade: firstSection.grade,
+            level: firstSection.level,
+          });
+        }
+      } catch (error: any) {
+        console.error("Error fetching sections:", error);
+        setError(
+          error.message || "Failed to load sections. Please try again later."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (userData && examId) {
+      fetchSections();
+    }
+  }, [userData, examId]);
+
+  if (!userData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Main Content Area */}
+      <main className="md:ml-64">
+        <div className="container mx-auto px-4 md:px-6 py-8">
+          {/* Page Header */}
+          <div className="mb-6">
+            <button
+              onClick={() => {
+                const url = examType ? `/exams?type=${examType}` : "/exams";
+                router.push(url);
+              }}
+              className="text-blue-600 hover:text-blue-700 mb-4 flex items-center"
+            >
+              ← Back to Exams
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Sections</h1>
+            {examInfo && (
+              <p className="text-gray-600">
+                {examInfo.exam} - Grade {examInfo.grade}, Level {examInfo.level}
+              </p>
+            )}
+          </div>
+
+          {/* Loading State */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-4 text-gray-600">Loading sections...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !isLoading && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-red-800">{error}</p>
+            </div>
+          )}
+
+          {/* Sections Grid */}
+          {!isLoading && !error && (
+            <SectionCard
+              sections={sections}
+              examId={examId}
+              examType={examType}
+              handleStartPractice={handleStartPractice}
+            />
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && sections.length === 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+              <div className="text-6xl mb-4">📚</div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                No Sections Available
+              </h3>
+              <p className="text-gray-600">No sections found for this exam.</p>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}

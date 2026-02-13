@@ -59,7 +59,4 @@ export function clearSession(): void {
   // Clear localStorage
   localStorage.removeItem("authenticated");
   localStorage.removeItem("user_data");
-  localStorage.removeItem("session_userid");
-  localStorage.removeItem("session_email");
-  localStorage.removeItem("session_password");
 }

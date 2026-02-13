@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Cookies from "js-cookie";
 import {
   Collapsible,
@@ -29,10 +29,29 @@ export default function Navbar({
   onMobileMenuClick,
 }: NavbarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(false);
-  const [isPerformanceDropdownOpen, setIsPerformanceDropdownOpen] =
-    useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentType = searchParams.get("type");
+
+  // Determine which dropdown items should be highlighted
+  const isOnExamsPage = pathname?.startsWith("/exams");
+  const isOnPerformancePage = pathname?.startsWith("/performance");
+
+  // Make dropdown states reactive to current page
+  const [isExamsDropdownOpen, setIsExamsDropdownOpen] = useState(isOnExamsPage);
+  const [isPerformanceDropdownOpen, setIsPerformanceDropdownOpen] =
+    useState(isOnPerformancePage);
+
+  // Update dropdown states when pathname changes
+  useEffect(() => {
+    setIsExamsDropdownOpen(isOnExamsPage);
+    setIsPerformanceDropdownOpen(isOnPerformancePage);
+  }, [isOnExamsPage, isOnPerformancePage]);
+  const isSectionExam = isOnExamsPage && currentType === "section";
+  const isSyllabusExam = isOnExamsPage && currentType === "syllabus";
+  const isSectionPerformance = isOnPerformancePage && currentType === "section";
+  const isSyllabusPerformance =
+    isOnPerformancePage && currentType === "syllabus";
 
   const handleLogout = () => {
     // Clear cookies (session data)
@@ -44,9 +63,6 @@ export default function Navbar({
     // Clear localStorage
     localStorage.removeItem("authenticated");
     localStorage.removeItem("user_data");
-    localStorage.removeItem("session_userid");
-    localStorage.removeItem("session_email");
-    localStorage.removeItem("session_password");
 
     // Clear all other localStorage items
     localStorage.clear();
@@ -80,7 +96,7 @@ export default function Navbar({
                   >
                     <CollapsibleTrigger
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
-                        pathname === item.href || pathname?.startsWith("/exams")
+                        pathname === item.href || isOnExamsPage
                           ? "bg-blue-600 text-white"
                           : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                       }`}
@@ -114,15 +130,21 @@ export default function Navbar({
                       </button>
                       <Link
                         href="/exams?type=section"
-                        onClick={() => setIsExamsDropdownOpen(false)}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                        className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                          isSectionExam
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        }`}
                       >
                         Practice Section Exam
                       </Link>
                       <Link
                         href="/exams?type=syllabus"
-                        onClick={() => setIsExamsDropdownOpen(false)}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                        className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                          isSyllabusExam
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        }`}
                       >
                         Practice Syllabus Exam
                       </Link>
@@ -141,8 +163,7 @@ export default function Navbar({
                   >
                     <CollapsibleTrigger
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
-                        pathname === item.href ||
-                        pathname?.startsWith("/performance")
+                        pathname === item.href || isOnPerformancePage
                           ? "bg-blue-600 text-white"
                           : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                       }`}
@@ -170,15 +191,21 @@ export default function Navbar({
                     <CollapsibleContent className="pl-4 space-y-1 mt-1">
                       <Link
                         href="/performance?type=section"
-                        onClick={() => setIsPerformanceDropdownOpen(false)}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                        className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                          isSectionPerformance
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        }`}
                       >
                         Section Exam
                       </Link>
                       <Link
                         href="/performance?type=syllabus"
-                        onClick={() => setIsPerformanceDropdownOpen(false)}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                        className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                          isSyllabusPerformance
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                        }`}
                       >
                         Syllabus Exam
                       </Link>
@@ -320,8 +347,7 @@ export default function Navbar({
                         >
                           <CollapsibleTrigger
                             className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
-                              pathname === item.href ||
-                              pathname?.startsWith("/exams")
+                              pathname === item.href || isOnExamsPage
                                 ? "bg-blue-600 text-white"
                                 : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                             }`}
@@ -355,21 +381,21 @@ export default function Navbar({
                             </button>
                             <Link
                               href="/exams?type=section"
-                              onClick={() => {
-                                setIsExamsDropdownOpen(false);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                              className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                                isSectionExam
+                                  ? "bg-blue-600 text-white"
+                                  : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
                             >
                               Practice Section Exam
                             </Link>
                             <Link
                               href="/exams?type=syllabus"
-                              onClick={() => {
-                                setIsExamsDropdownOpen(false);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                              className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                                isSyllabusExam
+                                  ? "bg-blue-600 text-white"
+                                  : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
                             >
                               Practice Syllabus Exam
                             </Link>
@@ -388,8 +414,7 @@ export default function Navbar({
                         >
                           <CollapsibleTrigger
                             className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition ${
-                              pathname === item.href ||
-                              pathname?.startsWith("/performance")
+                              pathname === item.href || isOnPerformancePage
                                 ? "bg-blue-600 text-white"
                                 : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                             }`}
@@ -417,21 +442,21 @@ export default function Navbar({
                           <CollapsibleContent className="pl-4 space-y-1">
                             <Link
                               href="/performance?type=section"
-                              onClick={() => {
-                                setIsPerformanceDropdownOpen(false);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                              className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                                isSectionPerformance
+                                  ? "bg-blue-600 text-white"
+                                  : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
                             >
                               Section Exam
                             </Link>
                             <Link
                               href="/performance?type=syllabus"
-                              onClick={() => {
-                                setIsPerformanceDropdownOpen(false);
-                                setIsMobileMenuOpen(false);
-                              }}
-                              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
+                              className={`block w-full text-left px-4 py-2 text-sm rounded-lg ${
+                                isSyllabusPerformance
+                                  ? "bg-blue-600 text-white"
+                                  : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
                             >
                               Syllabus Exam
                             </Link>
@@ -444,7 +469,6 @@ export default function Navbar({
                       <Link
                         key={item.name}
                         href={item.href}
-                        onClick={() => setIsMobileMenuOpen(false)}
                         className={`flex items-center px-4 py-3 rounded-lg text-base font-medium transition ${
                           pathname === item.href
                             ? "bg-blue-600 text-white"
